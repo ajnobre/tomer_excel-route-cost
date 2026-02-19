@@ -10,6 +10,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
+from openpyxl.formatting.rule import FormulaRule
 import re
 import glob
 from collections import defaultdict
@@ -212,8 +213,133 @@ def read_freight(filepath):
     return country_map
 
 
+def read_tonnage(filepath, freight_destinations):
+    """Read tonnage data from the Tonnage sheet in Freight.xlsx.
+    Uses only client-provided data (40HC entries).
+    For duplicate ports (e.g. Japan 2-axle vs 3-axle), keeps highest gross weight.
+    Returns:
+        tonnage: dict {freight_destination: (gross_weight_mt, is_confirmed)}
+        report: dict with quality_issues, matched, defaults lists
+    """
+    wb = openpyxl.load_workbook(filepath)
+    ws = wb['Tonnage']
+
+    # ── Step 1: Read all 40HC entries, deduplicate ────────────────────────
+    raw = {}  # cleaned_port_name -> (gross_weight, original_name, row_idx)
+    quality_issues = []
+
+    for row_idx in range(3, ws.max_row + 1):
+        port = ws.cell(row=row_idx, column=1).value
+        country = ws.cell(row=row_idx, column=2).value
+        gross = ws.cell(row=row_idx, column=5).value
+        ctype = str(ws.cell(row=row_idx, column=6).value or '').strip()
+
+        if not port or ctype != '40HC':
+            continue
+
+        port_str = str(port).strip()
+        country_str = str(country).strip() if country else ''
+
+        # Detect swapped port/country (Germany/Hamburg)
+        if port_str.lower() == 'germany' and country_str.lower() == 'hamburg':
+            quality_issues.append(
+                f"Row {row_idx}: Port/Country swapped: '{port_str}'/'{country_str}' -> Hamburg/Germany")
+            port_str = 'Hamburg'
+
+        # Detect trailing whitespace
+        if str(port).rstrip() != str(port):
+            quality_issues.append(f"Row {row_idx}: Trailing whitespace in port name: '{port}'")
+
+        # Detect misspellings (for report only — matching uses override table)
+        known_misspellings = {
+            'yokohoma': 'Yokohama', 'lisbao': 'Lisboa/Lisbon', 'le harve': 'Le Havre',
+        }
+        for wrong, correct in known_misspellings.items():
+            if port_str.lower() == wrong:
+                quality_issues.append(
+                    f"Row {row_idx}: Possible misspelling: '{port_str}' (should be {correct})")
+
+        # Detect annotation in name
+        if '**' in port_str or '(' in port_str:
+            quality_issues.append(f"Row {row_idx}: Annotation in port name: '{port_str}'")
+
+        if gross is None:
+            quality_issues.append(f"Row {row_idx}: Missing gross weight for '{port_str}'")
+            continue
+
+        gross_val = float(gross)
+        key = port_str.lower()
+
+        if key in raw:
+            if gross_val > raw[key][0]:
+                quality_issues.append(
+                    f"Duplicate port '{port_str}' (row {row_idx}): keeping higher weight "
+                    f"{gross_val} over {raw[key][0]}")
+                raw[key] = (gross_val, port_str, row_idx)
+            else:
+                quality_issues.append(
+                    f"Duplicate port '{port_str}' (row {row_idx}): skipping lower weight "
+                    f"{gross_val} (keeping {raw[key][0]})")
+        else:
+            raw[key] = (gross_val, port_str, row_idx)
+
+    # ── Step 2: Match tonnage ports to freight destinations ───────────────
+    # Override table for known name mismatches (freight_dest_lower -> tonnage_key)
+    OVERRIDES = {
+        'london gateway, gb': 'london gateway terminal',
+        'las palmas de gran canaria, es': 'las palmas',
+        'lisbon, pt': 'lisbao',
+        'yokohama, jp': 'yokohoma',
+        'guayaquil-posorja, ec': 'guayaquil',
+    }
+
+    # Cartagena: tonnage says Spain, freight says CO — do NOT match
+    SKIP_MATCHES = {'cartagena, co'}
+
+    tonnage = {}
+    matched = []
+    defaults = []
+
+    for dest in freight_destinations:
+        dest_lower = dest.lower()
+
+        if dest_lower in SKIP_MATCHES:
+            quality_issues.append(
+                f"Cartagena: tonnage lists Spain but freight destination is '{dest}' (Colombia) — not matched")
+            tonnage[dest] = (23, False)
+            defaults.append(dest)
+            continue
+
+        # Try override first
+        tonnage_key = OVERRIDES.get(dest_lower)
+
+        # Try extracting city name from "City, CC" format
+        if tonnage_key is None:
+            city = dest.split(',')[0].strip().lower()
+            if city in raw:
+                tonnage_key = city
+
+        if tonnage_key and tonnage_key in raw:
+            gross_val = raw[tonnage_key][0]
+            tonnage[dest] = (gross_val, True)
+            matched.append((dest, raw[tonnage_key][1], gross_val))
+        else:
+            tonnage[dest] = (23, False)
+            defaults.append(dest)
+
+    report = {
+        'quality_issues': quality_issues,
+        'matched': matched,
+        'defaults': defaults,
+        'matched_count': len(matched),
+        'default_count': len(defaults),
+        'total': len(freight_destinations),
+    }
+    return tonnage, report
+
+
 # ── Workbook builder ───────────────────────────────────────────────────────
-def build_tool(in_products, sl_products, freight):
+def build_tool(in_products, sl_products, freight, tonnage):
     wb = openpyxl.Workbook()
 
     # ── 1. Collect unique values for dropdowns ─────────────────────────────
@@ -254,11 +380,14 @@ def build_tool(in_products, sl_products, freight):
 
     # ── 4. Write freight sheet ─────────────────────────────────────────────
     ws_fr = wb.create_sheet('Freight')
-    fr_headers = ['Key', 'Country', 'Origin', 'Destination', 'Transit_Days', 'Total_USD', 'Total_EUR']
+    fr_headers = ['Key', 'Country', 'Origin', 'Destination', 'Transit_Days',
+                  'Total_USD', 'Total_EUR', 'Gross_Weight_MT', 'Weight_Confirmed']
     for c, h in enumerate(fr_headers, 1):
         ws_fr.cell(row=1, column=c, value=h)
     fr_rows = sorted(freight.values(), key=lambda x: (x['country'], x['destination']))
     for r, fr in enumerate(fr_rows, 2):
+        dest = fr['destination']
+        gross_wt, confirmed = tonnage.get(dest, (23, False))
         ws_fr.cell(row=r, column=1, value=f"{fr['country']}|{fr['destination']}")
         ws_fr.cell(row=r, column=2, value=fr['country'])
         ws_fr.cell(row=r, column=3, value=fr['origin'])
@@ -266,6 +395,8 @@ def build_tool(in_products, sl_products, freight):
         ws_fr.cell(row=r, column=5, value=fr['transit_days'])
         ws_fr.cell(row=r, column=6, value=fr['usd'])
         ws_fr.cell(row=r, column=7, value=fr['eur'])
+        ws_fr.cell(row=r, column=8, value=gross_wt)
+        ws_fr.cell(row=r, column=9, value=1 if confirmed else 0)
     fr_last = len(fr_rows) + 1
 
     # ── 5. Define named ranges ─────────────────────────────────────────────
@@ -285,10 +416,12 @@ def build_tool(in_products, sl_products, freight):
         'SL_Descs':   f"SL_GB!$C$2:$C${sl_last}",
         'SL_PCS':     f"SL_GB!$K$2:$Q${sl_last}",
         'SL_FOB':     f"SL_GB!$R$2:$X${sl_last}",
-        'FR_Keys':    f"Freight!$A$2:$A${fr_last}",
-        'FR_Transit': f"Freight!$E$2:$E${fr_last}",
-        'FR_USD':     f"Freight!$F$2:$F${fr_last}",
-        'FR_EUR':     f"Freight!$G$2:$G${fr_last}",
+        'FR_Keys':      f"Freight!$A$2:$A${fr_last}",
+        'FR_Transit':   f"Freight!$E$2:$E${fr_last}",
+        'FR_USD':       f"Freight!$F$2:$F${fr_last}",
+        'FR_EUR':       f"Freight!$G$2:$G${fr_last}",
+        'FR_GrossWT':   f"Freight!$H$2:$H${fr_last}",
+        'FR_Confirmed': f"Freight!$I$2:$I${fr_last}",
         'SizeList':    f"Lists!$A$2:$A${len(sizes)+1}",
         'ChipsList':   f"Lists!$B$2:$B${len(chips)+1}",
         'ECList':      f"Lists!$C$2:$C${len(ecs)+1}",
@@ -378,7 +511,6 @@ def _build_quote_sheet(ws):
         (8,  'Holes',                       'HolesList'),
         (9,  'BSU (Bottom Side Up)',        'BSUList'),
         (10, 'Port of Destination',         'DestList'),
-        (11, 'Container Gross Weight (MT)', 'WeightTiers'),
     ]
     for row, label, list_name in inputs:
         ws.cell(row=row, column=1, value=label).font = LABEL_FONT
@@ -395,6 +527,16 @@ def _build_quote_sheet(ws):
         ws.add_data_validation(dv)
         dv.add(cell_b)
 
+    # Row 11: Auto-derived weight tier (display-only, not a dropdown)
+    DISPLAY_FILL = PatternFill(start_color='E0E0E0', end_color='E0E0E0', fill_type='solid')
+    ws.cell(row=11, column=1, value='Container Gross Weight (MT)').font = LABEL_FONT
+    wt_cell = ws.cell(row=11, column=2)
+    wt_cell.value = '=IF(B10="","",IF(K5=0,"N/A",INDEX(WeightTiers,K5)&" MT"&IF(K12=0," (UNCONFIRMED)","")))'
+    wt_cell.fill = DISPLAY_FILL
+    wt_cell.font = Font(name='Calibri', size=11, italic=True)
+    wt_cell.border = THIN_BORDER
+    wt_cell.alignment = Alignment(horizontal='center')
+
     # EUR/USD rate (manual entry)
     ws.cell(row=12, column=1, value='EUR / USD Exchange Rate').font = LABEL_FONT
     rate = ws.cell(row=12, column=2, value=1.08)
@@ -407,10 +549,10 @@ def _build_quote_sheet(ws):
     # ── Helper cells (column K, hidden) ────────────────────────────────────
     # K4: lookup key (6 fields)
     ws['K4'] = '=B4&"|"&B5&"|"&B6&"|"&B7&"|"&B8&"|"&B9'
-    # K5: weight tier column index
-    ws['K5'] = '=IFERROR(MATCH(B11,WeightTiers,0),0)'
-    # K6: all required inputs filled?
-    ws['K6'] = '=AND(B4<>"",B5<>"",B6<>"",B7<>"",B8<>"",B9<>"",B10<>"",B11<>"")'
+    # K5: weight tier index — approximate match (largest tier <= gross weight)
+    ws['K5'] = '=IFERROR(MATCH(K11,WeightTiers,1),0)'
+    # K6: all required inputs filled? (7 inputs — weight is auto-derived)
+    ws['K6'] = '=AND(B4<>"",B5<>"",B6<>"",B7<>"",B8<>"",B9<>"",B10<>"")'
     # K7: India product match row
     ws['K7'] = '=IFERROR(MATCH(K4,IN_Keys,0),0)'
     # K8: Sri Lanka product match row
@@ -419,7 +561,32 @@ def _build_quote_sheet(ws):
     ws['K9'] = '=IFERROR(MATCH("India|"&B10,FR_Keys,0),0)'
     # K10: Sri Lanka freight match row
     ws['K10'] = '=IFERROR(MATCH("Sri Lanka|"&B10,FR_Keys,0),0)'
+    # K11: raw gross weight from tonnage (prefer India row, fall back to Sri Lanka)
+    ws['K11'] = '=IF(K9>0,INDEX(FR_GrossWT,K9),IF(K10>0,INDEX(FR_GrossWT,K10),0))'
+    # K12: weight confirmed flag (1=client data, 0=default)
+    ws['K12'] = '=IF(K9>0,INDEX(FR_Confirmed,K9),IF(K10>0,INDEX(FR_Confirmed,K10),0))'
     ws.column_dimensions['K'].hidden = True
+
+    # ── Tonnage warning row ───────────────────────────────────────────────
+    ws.merge_cells('A13:H13')
+    ws['A13'] = (
+        '=IF(AND(B10<>"",K12=0),'
+        '"WARNING: No confirmed weight data for this destination. '
+        'Using default 23 MT. Verify before quoting.","")'
+    )
+    ws['A13'].font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
+    # Conditional formatting: red background when warning is active
+    ws.conditional_formatting.add('A13:H13', FormulaRule(
+        formula=['AND($B$10<>"",$K$12=0)'],
+        fill=PatternFill(start_color='CC0000', end_color='CC0000', fill_type='solid'),
+        font=Font(bold=True, color='FFFFFF'),
+    ))
+    # Conditional formatting: red on B11 when unconfirmed
+    ws.conditional_formatting.add('B11', FormulaRule(
+        formula=['AND($B$10<>"",$K$12=0)'],
+        fill=PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid'),
+        font=Font(bold=True, color='CC0000'),
+    ))
 
     # ── Results section ────────────────────────────────────────────────────
     ws.row_dimensions[14].height = 8   # spacer
@@ -448,6 +615,14 @@ def _build_quote_sheet(ws):
     _write_result_row(ws, 17, 'India', 'IN', is_alt=False)
     # Sri Lanka row (18)
     _write_result_row(ws, 18, 'Sri Lanka', 'SL', is_alt=True)
+
+    # Conditional formatting: amber tint on weight-dependent result cells when unconfirmed
+    amber_fill = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid')
+    for col_range in ['C17:C18', 'E17:E18', 'G17:G18']:
+        ws.conditional_formatting.add(col_range, FormulaRule(
+            formula=['AND($B$10<>"",$K$12=0)'],
+            fill=amber_fill,
+        ))
 
     # ── Status message ─────────────────────────────────────────────────────
     ws.row_dimensions[19].height = 8
@@ -550,8 +725,27 @@ def main():
     freight = read_freight(FREIGHT_FILE)
     print(f"  {len(freight)} unique country+destination routes")
 
+    print("Reading Tonnage data...")
+    freight_destinations = sorted({v['destination'] for v in freight.values()})
+    tonnage, tonnage_report = read_tonnage(FREIGHT_FILE, freight_destinations)
+
+    if tonnage_report['quality_issues']:
+        print("\n  === TONNAGE DATA QUALITY REPORT ===")
+        for issue in tonnage_report['quality_issues']:
+            print(f"  WARNING: {issue}")
+
+    print(f"\n  Tonnage matched: {tonnage_report['matched_count']}/{tonnage_report['total']} "
+          f"destinations (client-confirmed)")
+    print(f"  Using default 23 MT: {tonnage_report['default_count']}/{tonnage_report['total']} "
+          f"destinations (UNCONFIRMED)")
+    if tonnage_report['defaults']:
+        print("  Destinations using default weight:")
+        for d in sorted(tonnage_report['defaults']):
+            print(f"    - {d}")
+    print()
+
     print("Building Quotation Tool workbook...")
-    wb = build_tool(in_products, sl_products, freight)
+    wb = build_tool(in_products, sl_products, freight, tonnage)
 
     print(f"Saving to {OUTPUT_FILE}...")
     wb.save(OUTPUT_FILE)

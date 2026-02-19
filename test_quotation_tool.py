@@ -2,14 +2,17 @@
 """
 Comprehensive test for the Quotation Tool workbook.
 Simulates Excel formula evaluation to verify lookup logic, freight aggregation,
-and final calculations before testing in Windows Excel.
+tonnage integration, and final calculations before testing in Windows Excel.
 """
 
 import openpyxl
+import os
 import sys
 from collections import defaultdict
 
-TOOL_FILE = '/Users/alvaronobre/Downloads/Quotation_Tool.xlsx'
+# Use the same folder as this script
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TOOL_FILE = os.path.join(BASE_DIR, 'Quotation_Tool.xlsx')
 
 def load_tool():
     """Load the generated tool and extract all data sheets."""
@@ -66,6 +69,7 @@ def test_named_ranges(wb):
         'IN_Keys', 'IN_ProdNos', 'IN_Descs', 'IN_PCS', 'IN_FOB',
         'SL_Keys', 'SL_ProdNos', 'SL_Descs', 'SL_PCS', 'SL_FOB',
         'FR_Keys', 'FR_Transit', 'FR_USD', 'FR_EUR',
+        'FR_GrossWT', 'FR_Confirmed',
         'SizeList', 'ChipsList', 'ECList', 'PlasticList',
         'HolesList', 'BSUList', 'DestList', 'WeightTiers',
     ]
@@ -78,6 +82,8 @@ def test_named_ranges(wb):
         else:
             print(f"  [FAIL] '{name}' NOT FOUND")
             ok = False
+
+    print(f"  [INFO] Total named ranges: {len(expected)} expected, {len(list(wb.defined_names))} found")
     return ok
 
 def test_data_integrity(wb):
@@ -120,14 +126,50 @@ def test_data_integrity(wb):
     products_with_fob = sum(1 for r in sl_rows if any(r[17+i] for i in range(7)))
     print(f"  [INFO] {products_with_fob}/{len(sl_rows)} SL_GB products have at least one FOB price")
 
-    # Freight
+    # Freight (now 9 columns: A-I)
     ws_fr = wb['Freight']
-    fr_rows = get_sheet_data(ws_fr, max_col=7)
+    fr_rows = get_sheet_data(ws_fr, max_col=9)
     print(f"  Freight: {len(fr_rows)} routes")
 
     india_routes = sum(1 for r in fr_rows if r[1] == 'India')
     sl_routes = sum(1 for r in fr_rows if r[1] == 'Sri Lanka')
     print(f"  [INFO] India routes: {india_routes}, Sri Lanka routes: {sl_routes}")
+
+    # Check tonnage columns (H=Gross_Weight_MT, I=Weight_Confirmed)
+    fr_headers = [ws_fr.cell(row=1, column=c).value for c in range(1, 10)]
+    if fr_headers[7] == 'Gross_Weight_MT' and fr_headers[8] == 'Weight_Confirmed':
+        print(f"  [PASS] Freight tonnage columns present (H=Gross_Weight_MT, I=Weight_Confirmed)")
+    else:
+        print(f"  [FAIL] Freight tonnage columns missing. Headers: {fr_headers}")
+        ok = False
+
+    # Validate tonnage data
+    confirmed_count = sum(1 for r in fr_rows if r[8] == 1)
+    default_count = sum(1 for r in fr_rows if r[8] == 0)
+    has_weight = sum(1 for r in fr_rows if r[7] is not None and r[7] > 0)
+    print(f"  [INFO] Tonnage: {confirmed_count} confirmed, {default_count} default (out of {len(fr_rows)} routes)")
+
+    if has_weight == len(fr_rows):
+        print(f"  [PASS] All freight routes have a weight value")
+    else:
+        print(f"  [FAIL] {len(fr_rows) - has_weight} routes missing weight data")
+        ok = False
+
+    # Confirm all default weights are 23
+    bad_defaults = [r for r in fr_rows if r[8] == 0 and r[7] != 23]
+    if not bad_defaults:
+        print(f"  [PASS] All unconfirmed routes use default 23 MT")
+    else:
+        print(f"  [FAIL] {len(bad_defaults)} unconfirmed routes with non-23 weight")
+        ok = False
+
+    # Confirm flag is 0 or 1
+    bad_flags = [r for r in fr_rows if r[8] not in (0, 1)]
+    if not bad_flags:
+        print(f"  [PASS] All Weight_Confirmed flags are 0 or 1")
+    else:
+        print(f"  [FAIL] {len(bad_flags)} routes with invalid confirmed flag")
+        ok = False
 
     # Lists
     ws_lists = wb['Lists']
@@ -156,20 +198,13 @@ def test_formula_simulation(wb):
 
     in_data = get_sheet_data(ws_in, max_col=24)
     sl_data = get_sheet_data(ws_sl, max_col=24)
-    fr_data = get_sheet_data(ws_fr, max_col=7)
+    fr_data = get_sheet_data(ws_fr, max_col=9)
 
     weight_tiers = [19.5, 22, 23, 24, 25, 26, 27]
 
-    def simulate(size, chips, ec, plastic, holes, bsu, destination, weight_mt, eur_rate=1.08):
-        """Simulate what Excel formulas would compute."""
+    def simulate(size, chips, ec, plastic, holes, bsu, destination, eur_rate=1.08):
+        """Simulate what Excel formulas would compute (weight auto-derived from tonnage)."""
         lookup_key = f"{size}|{chips}|{ec}|{plastic}|{holes}|{bsu}"
-
-        # Weight tier index (1-based for INDEX)
-        wt_idx = None
-        for i, wt in enumerate(weight_tiers):
-            if wt == weight_mt:
-                wt_idx = i
-                break
 
         results = {}
         for label, data, prefix in [('India', in_data, 'IN'), ('Sri Lanka', sl_data, 'SL')]:
@@ -188,12 +223,25 @@ def test_formula_simulation(wb):
                     fr_match = i
                     break
 
+            # Get weight tier from freight data (auto-derived, col H=index 7)
+            gross_wt = None
+            confirmed = None
+            if fr_match is not None:
+                gross_wt = fr_data[fr_match][7]
+                confirmed = fr_data[fr_match][8]
+
+            # Approximate MATCH for weight tier (largest tier <= gross weight)
+            wt_idx = None
+            if gross_wt is not None:
+                for i in range(len(weight_tiers) - 1, -1, -1):
+                    if weight_tiers[i] <= gross_wt:
+                        wt_idx = i
+                        break
+
             if prod_match is not None and wt_idx is not None:
                 prod_code = data[prod_match][1]
                 desc = data[prod_match][2]
-                # PCS: columns K-Q (index 10-16)
                 pcs = data[prod_match][10 + wt_idx]
-                # FOB: columns R-X (index 17-23)
                 fob = data[prod_match][17 + wt_idx]
             else:
                 prod_code = None
@@ -226,6 +274,9 @@ def test_formula_simulation(wb):
                 'freight_per_unit': freight_per_unit,
                 'total_cost': total_cost,
                 'transit_days': transit,
+                'gross_wt': gross_wt,
+                'confirmed': confirmed,
+                'tier': weight_tiers[wt_idx] if wt_idx is not None else None,
             }
 
         return lookup_key, results
@@ -241,29 +292,28 @@ def test_formula_simulation(wb):
     print(f"  [INFO] {len(common_keys)} product keys exist in BOTH India and Sri Lanka")
 
     if common_keys:
-        # Pick one and simulate
         test_key = sorted(common_keys)[0]
         parts = test_key.split('|')
         if len(parts) == 6:
-            # Get a destination that has both India and Sri Lanka freight
             fr_india_dests = set(r[3] for r in fr_data if r[1] == 'India')
             fr_sl_dests = set(r[3] for r in fr_data if r[1] == 'Sri Lanka')
             common_dests = fr_india_dests & fr_sl_dests
 
             if common_dests:
                 test_dest = sorted(common_dests)[0]
-                test_weight = 24  # mid-range tier
 
                 print(f"  [INFO] Testing with key: {test_key}")
-                print(f"  [INFO] Destination: {test_dest}, Weight: {test_weight} MT")
+                print(f"  [INFO] Destination: {test_dest}")
 
                 key, results = simulate(parts[0], parts[1], parts[2], parts[3], parts[4], parts[5],
-                                       test_dest, test_weight)
+                                       test_dest)
 
                 for origin, r in results.items():
                     if r['fob'] is not None:
                         print(f"\n  {origin}:")
                         print(f"    Product Code:      {r['product_code']}")
+                        print(f"    Weight Tier:       {r['tier']} MT (gross={r['gross_wt']}, "
+                              f"{'confirmed' if r['confirmed'] == 1 else 'DEFAULT'})")
                         print(f"    FOB/Unit:          ${r['fob']}")
                         print(f"    Freight/Container: ${r['freight_container']:.2f}" if r['freight_container'] else "    Freight/Container: N/A")
                         print(f"    Units/Container:   {r['units_container']}")
@@ -275,7 +325,7 @@ def test_formula_simulation(wb):
                         if r['freight_container'] and r['units_container'] and r['units_container'] > 0:
                             expected_fpu = r['freight_container'] / r['units_container']
                             if abs(expected_fpu - r['freight_per_unit']) < 0.001:
-                                print(f"    [PASS] Freight/Unit = Freight/Container ÷ Units/Container")
+                                print(f"    [PASS] Freight/Unit = Freight/Container / Units/Container")
                             else:
                                 print(f"    [FAIL] Freight/Unit mismatch: {r['freight_per_unit']} vs expected {expected_fpu}")
                                 ok = False
@@ -295,7 +345,6 @@ def test_formula_simulation(wb):
     print("  Reference: India FOB=2, Freight=3000, Units=8000, Total=2.375")
     print("  Reference: Sri Lanka FOB=2, Freight=5000, Units=7000, Total=2.714")
 
-    # Search for products with FOB=2 at any weight tier
     in_fob2 = []
     for r in in_data:
         for i in range(7):
@@ -311,7 +360,6 @@ def test_formula_simulation(wb):
     print(f"  [INFO] India products with FOB=$2: {len(in_fob2)}")
     print(f"  [INFO] Sri Lanka products with FOB=$2: {len(sl_fob2)}")
 
-    # Filter India: FOB=2, PCS=8000
     in_match = [x for x in in_fob2 if x[4] == 8000]
     sl_match = [x for x in sl_fob2 if x[4] == 7000]
 
@@ -329,7 +377,6 @@ def test_formula_simulation(wb):
     else:
         print(f"  [INFO] No Sri Lanka product with FOB=2 and PCS=7000")
 
-    # Check if any India+SL share the same key (same product both origins)
     if in_match and sl_match:
         in_keys_2 = set(m[0] for m in in_match)
         sl_keys_2 = set(m[0] for m in sl_match)
@@ -389,6 +436,14 @@ def test_quote_formulas(wb):
             print(f"  [FAIL] Row {row}: expected '{expected}...', got '{label}'")
             ok = False
 
+    # B11 should be a formula (auto-derived, not a dropdown)
+    b11 = ws['B11'].value
+    if b11 and str(b11).startswith('=') and 'WeightTiers' in str(b11):
+        print(f"  [PASS] B11 is an auto-derived formula (not a dropdown)")
+    else:
+        print(f"  [FAIL] B11 should be a formula with WeightTiers, got: {b11}")
+        ok = False
+
     # Check EUR/USD rate default
     rate = ws['B12'].value
     if rate == 1.08:
@@ -399,13 +454,15 @@ def test_quote_formulas(wb):
 
     # Check helper formulas in K column
     helper_cells = {
-        'K4': 'B4&"|"&B5&"|"&B6&"|"&B7&"|"&B8&"|"&B9',  # lookup key
-        'K5': 'MATCH(B11,WeightTiers,0)',  # weight tier
-        'K6': 'AND(B4<>"",B5<>"",B6<>"",B7<>"",B8<>"",B9<>"",B10<>"",B11<>"")',  # all filled
-        'K7': 'MATCH(K4,IN_Keys,0)',  # India match
-        'K8': 'MATCH(K4,SL_Keys,0)',  # SL match
-        'K9': 'MATCH("India|"&B10,FR_Keys,0)',  # India freight
-        'K10': 'MATCH("Sri Lanka|"&B10,FR_Keys,0)',  # SL freight
+        'K4': 'B4&"|"&B5&"|"&B6&"|"&B7&"|"&B8&"|"&B9',    # lookup key
+        'K5': 'MATCH(K11,WeightTiers,1)',                     # weight tier (approximate match)
+        'K6': 'AND(B4<>"",B5<>"",B6<>"",B7<>"",B8<>"",B9<>"",B10<>"")',  # 7 inputs
+        'K7': 'MATCH(K4,IN_Keys,0)',                          # India match
+        'K8': 'MATCH(K4,SL_Keys,0)',                          # SL match
+        'K9': 'MATCH("India|"&B10,FR_Keys,0)',                # India freight
+        'K10': 'MATCH("Sri Lanka|"&B10,FR_Keys,0)',           # SL freight
+        'K11': 'INDEX(FR_GrossWT',                             # gross weight from tonnage
+        'K12': 'INDEX(FR_Confirmed',                           # confirmed flag
     }
     for cell_ref, expected_fragment in helper_cells.items():
         formula = ws[cell_ref].value
@@ -439,9 +496,17 @@ def test_quote_formulas(wb):
     # Check warning message formula
     warn = ws['A20'].value
     if warn and 'K6' in str(warn) and 'K7' in str(warn):
-        print(f"  [PASS] Warning message formula present")
+        print(f"  [PASS] Status message formula present")
     else:
-        print(f"  [FAIL] Warning message formula missing or incomplete")
+        print(f"  [FAIL] Status message formula missing or incomplete")
+        ok = False
+
+    # Check tonnage warning row (A13)
+    tonnage_warn = ws['A13'].value
+    if tonnage_warn and 'K12' in str(tonnage_warn) and 'WARNING' in str(tonnage_warn):
+        print(f"  [PASS] Tonnage warning formula present in A13")
+    else:
+        print(f"  [FAIL] Tonnage warning formula missing in A13, got: {tonnage_warn}")
         ok = False
 
     # Check description reference rows
@@ -467,8 +532,9 @@ def test_dropdown_validations(wb):
     validations = list(ws.data_validations.dataValidation)
     print(f"  [INFO] Found {len(validations)} data validations")
 
+    # Weight dropdown removed — now only 7 dropdowns
     expected_lists = ['SizeList', 'ChipsList', 'ECList', 'PlasticList',
-                      'HolesList', 'BSUList', 'DestList', 'WeightTiers']
+                      'HolesList', 'BSUList', 'DestList']
     found_lists = set()
     for dv in validations:
         if dv.formula1:
@@ -480,6 +546,13 @@ def test_dropdown_validations(wb):
         else:
             print(f"  [FAIL] Dropdown for '{el}' MISSING")
             ok = False
+
+    # WeightTiers should NOT be a dropdown anymore
+    if 'WeightTiers' in found_lists:
+        print(f"  [FAIL] WeightTiers dropdown should have been removed (weight is auto-derived)")
+        ok = False
+    else:
+        print(f"  [PASS] WeightTiers dropdown correctly removed (weight is auto-derived)")
 
     return ok
 
@@ -504,18 +577,14 @@ def test_windows_compatibility(wb):
 
     issues = []
     for ref, formula in formulas:
-        # Check for semicolons (some locales use ; instead of ,)
-        # openpyxl uses commas which is correct for en-US
         if ';' in formula:
             issues.append(f"  {ref}: Contains semicolons (may be locale issue)")
 
-        # Check for Mac-specific functions that don't exist in Windows
         mac_only = ['WEBSERVICE', 'FILTERXML']
         for func in mac_only:
             if func in formula.upper():
                 issues.append(f"  {ref}: Uses Mac-specific function {func}")
 
-        # Check for very long formulas that might hit Windows limits
         if len(formula) > 8192:
             issues.append(f"  {ref}: Formula exceeds 8192 chars ({len(formula)})")
 
@@ -529,8 +598,6 @@ def test_windows_compatibility(wb):
     # Check named range references don't use Mac-style paths
     for name in wb.defined_names:
         ref = wb.defined_names[name].attr_text
-        if '/' in ref or ':' not in ref.split('!')[-1]:
-            pass  # these are fine — sheet!range format
         if 'Macintosh' in ref or '/Users/' in ref:
             print(f"  [FAIL] Named range '{name}' contains Mac path: {ref}")
             ok = False
@@ -545,9 +612,7 @@ def test_windows_compatibility(wb):
         funcs = re.findall(r'([A-Z]+)\(', formula)
         functions_used.update(funcs)
 
-    # These all work in Windows Excel
     safe_functions = {'IF', 'AND', 'OR', 'NOT', 'INDEX', 'MATCH', 'IFERROR'}
-    used_safe = functions_used & safe_functions
     used_other = functions_used - safe_functions
 
     print(f"  [INFO] Functions used: {sorted(functions_used)}")
@@ -556,7 +621,7 @@ def test_windows_compatibility(wb):
     else:
         print(f"  [PASS] All functions are standard Excel functions")
 
-    # Check column K is hidden (visual cleanliness)
+    # Check column K is hidden
     if ws.column_dimensions['K'].hidden:
         print(f"  [PASS] Helper column K is hidden")
     else:
@@ -576,7 +641,7 @@ def test_exhaustive_lookups(wb):
 
     in_data = get_sheet_data(ws_in, max_col=24)
     sl_data = get_sheet_data(ws_sl, max_col=24)
-    fr_data = get_sheet_data(ws_fr, max_col=7)
+    fr_data = get_sheet_data(ws_fr, max_col=9)
 
     weight_tiers = [19.5, 22, 23, 24, 25, 26, 27]
 
@@ -631,6 +696,82 @@ def test_exhaustive_lookups(wb):
 
     return True
 
+def test_tonnage_integration(wb):
+    """Test 9: Verify tonnage integration is consistent and complete."""
+    print("\n" + "=" * 60)
+    print("TEST 9: Tonnage Integration")
+    print("=" * 60)
+
+    ws_fr = wb['Freight']
+    fr_data = get_sheet_data(ws_fr, max_col=9)
+    weight_tiers = [19.5, 22, 23, 24, 25, 26, 27]
+
+    ok = True
+
+    # Check that both India and Sri Lanka rows for the same destination have the same weight
+    dest_weights = {}
+    for r in fr_data:
+        dest = r[3]
+        gross = r[7]
+        confirmed = r[8]
+        if dest not in dest_weights:
+            dest_weights[dest] = (gross, confirmed)
+        else:
+            if dest_weights[dest][0] != gross:
+                print(f"  [FAIL] Destination '{dest}' has inconsistent weights: "
+                      f"{dest_weights[dest][0]} vs {gross}")
+                ok = False
+
+    if ok:
+        print(f"  [PASS] All destinations have consistent weight across India/Sri Lanka rows")
+
+    # Check that all weights map to a valid tier
+    unmappable = []
+    for r in fr_data:
+        gross = r[7]
+        mapped = False
+        for wt in weight_tiers:
+            if wt <= gross:
+                mapped = True
+        if not mapped:
+            unmappable.append((r[3], gross))
+
+    if not unmappable:
+        print(f"  [PASS] All gross weights map to a valid tier (>= 19.5 MT)")
+    else:
+        print(f"  [WARN] {len(unmappable)} routes with weight below minimum tier 19.5:")
+        for dest, gross in unmappable[:5]:
+            print(f"    {dest}: {gross} MT")
+
+    # Report weight distribution
+    weight_counts = {}
+    unique_dests = set()
+    for r in fr_data:
+        dest = r[3]
+        if dest not in unique_dests:
+            unique_dests.add(dest)
+            gross = r[7]
+            confirmed = r[8]
+            label = f"{gross} MT ({'confirmed' if confirmed == 1 else 'default'})"
+            weight_counts[label] = weight_counts.get(label, 0) + 1
+
+    print(f"  [INFO] Weight distribution across {len(unique_dests)} unique destinations:")
+    for label in sorted(weight_counts.keys()):
+        print(f"    {label}: {weight_counts[label]} destinations")
+
+    # Check conditional formatting exists
+    ws_q = wb['Quote']
+    cf_rules = list(ws_q.conditional_formatting)
+    cf_count = len(cf_rules)
+    print(f"  [INFO] Conditional formatting rules on Quote sheet: {cf_count}")
+    if cf_count >= 3:
+        print(f"  [PASS] At least 3 conditional formatting rules present (warning row + B11 + result cells)")
+    else:
+        print(f"  [FAIL] Expected at least 3 conditional formatting rules, found {cf_count}")
+        ok = False
+
+    return ok
+
 
 def main():
     print("QUOTATION TOOL — COMPREHENSIVE TEST SUITE")
@@ -652,6 +793,7 @@ def main():
     results.append(("Dropdowns", test_dropdown_validations(wb)))
     results.append(("Windows Compat", test_windows_compatibility(wb)))
     results.append(("Exhaustive Lookups", test_exhaustive_lookups(wb)))
+    results.append(("Tonnage Integration", test_tonnage_integration(wb)))
 
     print("\n" + "=" * 60)
     print("SUMMARY")
@@ -670,11 +812,12 @@ def main():
 
     print("\n  RECOMMENDED MANUAL TEST IN WINDOWS EXCEL:")
     print("  1. Open Quotation_Tool.xlsx")
-    print("  2. On the Quote sheet, select values from all 8 dropdowns")
-    print("  3. Verify results appear in the India and Sri Lanka rows")
-    print("  4. Try a combination that only exists in one origin")
-    print("  5. Try an invalid combination — should show 'No results found'")
-    print("  6. Check that hidden sheets are not visible (right-click sheet tabs)")
+    print("  2. On the Quote sheet, select values from all 7 dropdowns")
+    print("  3. Verify weight tier auto-populates based on destination")
+    print("  4. Select a destination with confirmed tonnage — no warning should appear")
+    print("  5. Select a destination with default tonnage — red warning banner should appear")
+    print("  6. Verify results still compute correctly")
+    print("  7. Check that hidden sheets are not visible (right-click sheet tabs)")
 
 
 if __name__ == '__main__':
