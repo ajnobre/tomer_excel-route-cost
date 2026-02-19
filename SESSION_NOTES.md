@@ -119,13 +119,21 @@ The freight aggregation logic in the Python script:
 
 148 out of 1,952 freight charge lines are in EUR (not USD), affecting 44 routes. These are **European destinations** (Spain, Italy, Portugal, Greece, Bulgaria, Ireland). The EUR charges are local fees like DHC (Destination Handling Charge, EUR 189–275), CP1 (EUR 18–23), EHI/IHI, and PAI. The tool converts these to USD using the editable exchange rate (default 1.08) to compute a single freight total per route.
 
-### Client's 1.0605 Multiplier
+### Client's 1.0605 Multiplier (Implemented)
 
-The client uses a multiplier of **1.0605** (= 1.01 × 1.05) applied on top of freight costs. This likely represents:
+The client uses a multiplier of **1.0605** (= 1.01 × 1.05) applied on top of freight costs:
 - **1.01** = 1% insurance surcharge
 - **1.05** = 5% margin/buffer
 
-**Issue identified:** The client was applying this to BAS (base rate) only, not the total freight. This underestimates actual freight by ~38% on average, because surcharges (ERS, VP1, DHC, etc.) add significant cost on top of the base rate. The correct approach is to sum all charge codes first, then apply the multiplier to the total.
+**Applied to the sum of ALL charge codes** per route, hardcoded in the Freight/Container formula:
+
+```
+Freight/Container = (sum_USD + sum_EUR × exchange_rate) × 1.0605
+```
+
+This flows through automatically to Freight/Unit and Total Cost/Unit.
+
+**Previous issue (now resolved):** The client was applying 1.0605 to BAS (base rate) only, not the total freight. This underestimated actual freight by ~38% because surcharges (ERS, VP1, DHC, etc.) add significant cost on top of the base rate. The tool now correctly sums all charge codes first, then applies the multiplier. Pending final confirmation from the client that this is the intended approach.
 
 ### Weight Tiers and Tonnage (Session 4 — Integrated)
 
@@ -237,7 +245,7 @@ Busan ($76), Kaohsiung ($81), Laem Chabang ($85) — may have missing base rates
 5. **Exact matching only** — no fuzzy/closest-equivalent matching. Show clear "No results found" messages instead
 6. **Cheapest Indian port** auto-selected per destination
 7. **Relative paths with auto-detection** — script finds `Price List*.xlsx` and `Freight*.xlsx` in its own folder, works on any machine
-8. **Sum all freight charge codes** per route (not just BAS × multiplier) for accurate freight totals
+8. **Sum all freight charge codes** per route, then apply × 1.0605 multiplier (hardcoded) — not just BAS × multiplier
 9. **Client's Tonnage data only** — the Tonnage_Complete.xlsx research is kept for reference but the tool uses solely the client-provided Tonnage sheet from Freight.xlsx
 10. **Default 23 MT** for unmatched destinations, with prominent visual warnings to alert the user
 11. **Auto-derive weight tier** from destination (removed manual dropdown) — reduces user error and ensures consistency with client's tonnage data
@@ -267,7 +275,7 @@ Functions used: IF, AND, OR, NOT, INDEX, MATCH, IFERROR — all standard, all Wi
 - [ ] **Duplicate handling** — client must decide if more input filters are needed or if first-match is acceptable; also confirm whether true duplicates are intentional
 - [ ] **Cartagena country** — confirm whether Cartagena in the freight file is Colombia or Spain (freight data says CO)
 - [ ] **Ashdod/Israel** — confirm 25T (client) vs 33T (OOCL) weight limit
-- [ ] **Freight summing approach** — confirm with client: are they summing all charge codes or just picking BAS × 1.0605?
+- [ ] **Freight summing approach** — confirm with client: we now sum ALL charge codes then apply × 1.0605 (message sent, awaiting response)
 - [ ] **Suspiciously cheap routes** — verify Busan ($76), Kaohsiung ($81), Laem Chabang ($85) for missing base rates
 - [ ] **Tonnage data cleanup** — ask client to fix misspellings, swapped fields, and Cartagena country in the Tonnage sheet
 - [ ] **33 unconfirmed destinations** — client should provide tonnage for the destinations currently defaulting to 23 MT (see list in build script output)
