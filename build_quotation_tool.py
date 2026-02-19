@@ -685,8 +685,8 @@ def _write_result_row(ws, row, label, prefix, is_alt=False):
     # C: FOB Price / Unit
     cell(3, f'=IF(NOT($K$6),"",IF(OR({mr}=0,$K$5=0),"-",INDEX({prefix}_FOB,{mr},$K$5)))', '#,##0.00')
 
-    # D: Freight / Container
-    cell(4, f'=IF(NOT($K$6),"",IF({fr}=0,"-",INDEX(FR_USD,{fr})+INDEX(FR_EUR,{fr})*$B$12))', '#,##0.00')
+    # D: Freight / Container (sum of all charges × 1.0605 insurance+margin multiplier)
+    cell(4, f'=IF(NOT($K$6),"",IF({fr}=0,"-",(INDEX(FR_USD,{fr})+INDEX(FR_EUR,{fr})*$B$12)*1.0605))', '#,##0.00')
 
     # E: Units / Container
     cell(5, f'=IF(NOT($K$6),"",IF(OR({mr}=0,$K$5=0),"-",INDEX({prefix}_PCS,{mr},$K$5)))', '#,##0')

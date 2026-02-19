@@ -253,7 +253,7 @@ def test_formula_simulation(wb):
                 transit = fr_data[fr_match][4]
                 usd = fr_data[fr_match][5]
                 eur = fr_data[fr_match][6]
-                freight_total = usd + eur * eur_rate
+                freight_total = (usd + eur * eur_rate) * 1.0605
             else:
                 transit = None
                 freight_total = None
