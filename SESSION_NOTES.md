@@ -50,8 +50,9 @@ Quote sheet (visible):
 Hidden data sheets:
   - IN_GB: 71 products, 6-field lookup key + parsed attributes + PCS + FOB
   - SL_GB: 246 products, same structure
-  - Freight: 140 routes (cheapest per country+destination), aggregated USD+EUR totals,
-    plus Gross_Weight_MT (col H) and Weight_Confirmed (col I) per route
+  - Freight: 140 routes (cheapest per country+destination), BAS_USD (col J) for quoting,
+    aggregated Total_USD/EUR (cols F-G) for reference, Gross_Weight_MT (col H),
+    Weight_Confirmed (col I)
   - Lists: unique dropdown values for all input fields + weight tiers
 
 Named ranges (24 total):
@@ -108,32 +109,36 @@ Each shipping route has 10–15 individual charge code rows that **must be summe
 | Others | EHI, EMS, EXP, FDH, FRO, IHI, IMP, LWC, PCC, PSI, RHI, CVO, DTI |
 
 The freight aggregation logic in the Python script:
-- All charge line items for a route are summed (USD separate from EUR)
+- **BAS (base ocean freight) is extracted separately** — this is what the client uses for quoting
+- All other charge line items are also summed per route (USD separate from EUR) and stored for reference
 - For India, the cheapest port is selected per destination (currently only Tuticorin in the data)
 - Transit time extracted as integer from strings like "46 Days"
 - Freight lookup key = `country|destination` (e.g. "India|Adelaide, AU")
+- BAS is always in USD (verified across all 140 routes)
 
 **Suspiciously cheap routes** (may have missing base rates): Busan ($76), Kaohsiung ($81), Laem Chabang ($85)
 
-### EUR/USD Exchange Rate — Why It's Needed
+### EUR/USD Exchange Rate
 
-148 out of 1,952 freight charge lines are in EUR (not USD), affecting 44 routes. These are **European destinations** (Spain, Italy, Portugal, Greece, Bulgaria, Ireland). The EUR charges are local fees like DHC (Destination Handling Charge, EUR 189–275), CP1 (EUR 18–23), EHI/IHI, and PAI. The tool converts these to USD using the editable exchange rate (default 1.08) to compute a single freight total per route.
+148 out of 1,952 freight charge lines are in EUR (not USD), affecting 44 routes. These are **European destinations** (Spain, Italy, Portugal, Greece, Bulgaria, Ireland). The EUR charges are local fees like DHC (Destination Handling Charge, EUR 189–275), CP1 (EUR 18–23), EHI/IHI, and PAI.
+
+**Note:** Since the freight formula now uses BAS only (always USD), the EUR/USD exchange rate input on the Quote sheet is no longer used in calculations. It is retained for reference but does not affect results.
 
 ### Client's 1.0605 Multiplier (Implemented)
 
-The client uses a multiplier of **1.0605** (= 1.01 × 1.05) applied on top of freight costs:
+The client uses a multiplier of **1.0605** (= 1.01 × 1.05) applied on top of the **BAS (base ocean freight)** rate:
 - **1.01** = 1% insurance surcharge
 - **1.05** = 5% margin/buffer
 
-**Applied to the sum of ALL charge codes** per route, hardcoded in the Freight/Container formula:
+Hardcoded in the Freight/Container formula:
 
 ```
-Freight/Container = (sum_USD + sum_EUR × exchange_rate) × 1.0605
+Freight/Container = BAS_USD × 1.0605
 ```
 
 This flows through automatically to Freight/Unit and Total Cost/Unit.
 
-**Previous issue (now resolved):** The client was applying 1.0605 to BAS (base rate) only, not the total freight. This underestimated actual freight by ~38% because surcharges (ERS, VP1, DHC, etc.) add significant cost on top of the base rate. The tool now correctly sums all charge codes first, then applies the multiplier. Pending final confirmation from the client that this is the intended approach.
+**Client confirmed** that the multiplier applies to BAS only, not to the sum of all surcharges. The other charge codes (ERS, VP1, DHC, etc.) are not included in the quotation freight cost. The Freight data sheet retains Total_USD and Total_EUR columns for reference.
 
 ### Weight Tiers and Tonnage (Session 4 — Integrated)
 
