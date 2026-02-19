@@ -69,7 +69,7 @@ def test_named_ranges(wb):
         'IN_Keys', 'IN_ProdNos', 'IN_Descs', 'IN_PCS', 'IN_FOB',
         'SL_Keys', 'SL_ProdNos', 'SL_Descs', 'SL_PCS', 'SL_FOB',
         'FR_Keys', 'FR_Transit', 'FR_USD', 'FR_EUR',
-        'FR_GrossWT', 'FR_Confirmed',
+        'FR_GrossWT', 'FR_Confirmed', 'FR_BAS',
         'SizeList', 'ChipsList', 'ECList', 'PlasticList',
         'HolesList', 'BSUList', 'DestList', 'WeightTiers',
     ]
@@ -135,12 +135,12 @@ def test_data_integrity(wb):
     sl_routes = sum(1 for r in fr_rows if r[1] == 'Sri Lanka')
     print(f"  [INFO] India routes: {india_routes}, Sri Lanka routes: {sl_routes}")
 
-    # Check tonnage columns (H=Gross_Weight_MT, I=Weight_Confirmed)
-    fr_headers = [ws_fr.cell(row=1, column=c).value for c in range(1, 10)]
-    if fr_headers[7] == 'Gross_Weight_MT' and fr_headers[8] == 'Weight_Confirmed':
-        print(f"  [PASS] Freight tonnage columns present (H=Gross_Weight_MT, I=Weight_Confirmed)")
+    # Check tonnage and BAS columns
+    fr_headers = [ws_fr.cell(row=1, column=c).value for c in range(1, 11)]
+    if fr_headers[7] == 'Gross_Weight_MT' and fr_headers[8] == 'Weight_Confirmed' and fr_headers[9] == 'BAS_USD':
+        print(f"  [PASS] Freight columns H-J present (Gross_Weight_MT, Weight_Confirmed, BAS_USD)")
     else:
-        print(f"  [FAIL] Freight tonnage columns missing. Headers: {fr_headers}")
+        print(f"  [FAIL] Freight columns H-J missing or wrong. Headers: {fr_headers}")
         ok = False
 
     # Validate tonnage data
@@ -198,7 +198,7 @@ def test_formula_simulation(wb):
 
     in_data = get_sheet_data(ws_in, max_col=24)
     sl_data = get_sheet_data(ws_sl, max_col=24)
-    fr_data = get_sheet_data(ws_fr, max_col=9)
+    fr_data = get_sheet_data(ws_fr, max_col=10)
 
     weight_tiers = [19.5, 22, 23, 24, 25, 26, 27]
 
@@ -251,9 +251,8 @@ def test_formula_simulation(wb):
 
             if fr_match is not None:
                 transit = fr_data[fr_match][4]
-                usd = fr_data[fr_match][5]
-                eur = fr_data[fr_match][6]
-                freight_total = (usd + eur * eur_rate) * 1.0605
+                bas_usd = fr_data[fr_match][9]  # BAS_USD column J
+                freight_total = bas_usd * 1.0605
             else:
                 transit = None
                 freight_total = None
@@ -641,7 +640,7 @@ def test_exhaustive_lookups(wb):
 
     in_data = get_sheet_data(ws_in, max_col=24)
     sl_data = get_sheet_data(ws_sl, max_col=24)
-    fr_data = get_sheet_data(ws_fr, max_col=9)
+    fr_data = get_sheet_data(ws_fr, max_col=10)
 
     weight_tiers = [19.5, 22, 23, 24, 25, 26, 27]
 
@@ -703,7 +702,7 @@ def test_tonnage_integration(wb):
     print("=" * 60)
 
     ws_fr = wb['Freight']
-    fr_data = get_sheet_data(ws_fr, max_col=9)
+    fr_data = get_sheet_data(ws_fr, max_col=10)
     weight_tiers = [19.5, 22, 23, 24, 25, 26, 27]
 
     ok = True

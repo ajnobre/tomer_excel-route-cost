@@ -172,9 +172,9 @@ def read_freight(filepath):
     wb = openpyxl.load_workbook(filepath)
     ws = wb['Freight']
 
-    route_charges = defaultdict(lambda: {'transit': '', 'usd': 0, 'eur': 0})
+    route_charges = defaultdict(lambda: {'transit': '', 'usd': 0, 'eur': 0, 'bas_usd': 0})
     for row in ws.iter_rows(min_row=2, values_only=True):
-        receipt, delivery, _omot, _dmot, transit, _charge, _basis, currency, rate = row
+        receipt, delivery, _omot, _dmot, transit, charge, _basis, currency, rate = row
         if not receipt or not delivery:
             continue
         key = (receipt, delivery)
@@ -184,6 +184,8 @@ def read_freight(filepath):
                 route_charges[key]['usd'] += float(rate)
             elif currency == 'EUR':
                 route_charges[key]['eur'] += float(rate)
+            if charge == 'BAS':
+                route_charges[key]['bas_usd'] += float(rate)
 
     country_map = {}
     for (origin, dest), data in route_charges.items():
@@ -208,6 +210,7 @@ def read_freight(filepath):
                 'transit_days': transit_days,
                 'usd': round(data['usd'], 2),
                 'eur': round(data['eur'], 2),
+                'bas_usd': round(data['bas_usd'], 2),
                 'approx': approx_total,
             }
     return country_map
@@ -381,7 +384,7 @@ def build_tool(in_products, sl_products, freight, tonnage):
     # ── 4. Write freight sheet ─────────────────────────────────────────────
     ws_fr = wb.create_sheet('Freight')
     fr_headers = ['Key', 'Country', 'Origin', 'Destination', 'Transit_Days',
-                  'Total_USD', 'Total_EUR', 'Gross_Weight_MT', 'Weight_Confirmed']
+                  'Total_USD', 'Total_EUR', 'Gross_Weight_MT', 'Weight_Confirmed', 'BAS_USD']
     for c, h in enumerate(fr_headers, 1):
         ws_fr.cell(row=1, column=c, value=h)
     fr_rows = sorted(freight.values(), key=lambda x: (x['country'], x['destination']))
@@ -397,6 +400,7 @@ def build_tool(in_products, sl_products, freight, tonnage):
         ws_fr.cell(row=r, column=7, value=fr['eur'])
         ws_fr.cell(row=r, column=8, value=gross_wt)
         ws_fr.cell(row=r, column=9, value=1 if confirmed else 0)
+        ws_fr.cell(row=r, column=10, value=fr['bas_usd'])
     fr_last = len(fr_rows) + 1
 
     # ── 5. Define named ranges ─────────────────────────────────────────────
@@ -422,6 +426,7 @@ def build_tool(in_products, sl_products, freight, tonnage):
         'FR_EUR':       f"Freight!$G$2:$G${fr_last}",
         'FR_GrossWT':   f"Freight!$H$2:$H${fr_last}",
         'FR_Confirmed': f"Freight!$I$2:$I${fr_last}",
+        'FR_BAS':       f"Freight!$J$2:$J${fr_last}",
         'SizeList':    f"Lists!$A$2:$A${len(sizes)+1}",
         'ChipsList':   f"Lists!$B$2:$B${len(chips)+1}",
         'ECList':      f"Lists!$C$2:$C${len(ecs)+1}",
@@ -685,8 +690,8 @@ def _write_result_row(ws, row, label, prefix, is_alt=False):
     # C: FOB Price / Unit
     cell(3, f'=IF(NOT($K$6),"",IF(OR({mr}=0,$K$5=0),"-",INDEX({prefix}_FOB,{mr},$K$5)))', '#,##0.00')
 
-    # D: Freight / Container (sum of all charges × 1.0605 insurance+margin multiplier)
-    cell(4, f'=IF(NOT($K$6),"",IF({fr}=0,"-",(INDEX(FR_USD,{fr})+INDEX(FR_EUR,{fr})*$B$12)*1.0605))', '#,##0.00')
+    # D: Freight / Container (BAS rate × 1.0605 insurance+margin multiplier)
+    cell(4, f'=IF(NOT($K$6),"",IF({fr}=0,"-",INDEX(FR_BAS,{fr})*1.0605))', '#,##0.00')
 
     # E: Units / Container
     cell(5, f'=IF(NOT($K$6),"",IF(OR({mr}=0,$K$5=0),"-",INDEX({prefix}_PCS,{mr},$K$5)))', '#,##0')
