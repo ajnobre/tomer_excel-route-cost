@@ -1,0 +1,93 @@
+Complete Tonnage Table — All Freight Destinations;;;;;;;;
+Green = client provided | Blue = researched (verified source) | Yellow = discrepancy to review | Red = no data (please fill in);;;;;;;;
+;;;;;;;;
+Freight Destination;Country;Net Weight (MT);Gross Weight (MT);Container;Source Level;Notes;Source;Source URL
+Adelaide, AU;Australia;24;28;40HC;Semi-official;South Australia: max loaded container 28T per Cargo Network Intl. NHVR.gov.au is official regulator.;Cargo Network International;https://www.cargonetwork.com.au/container-weight-limitations/
+Agadir, MA;Morocco;26;27;40HC;Client provided;;Original Tonnage sheet;
+Alexandria, EG;Egypt;24;25;40HC;Client provided;;Original Tonnage sheet;
+Algeciras, ES;Spain;23;24;40HC;Client provided;;Original Tonnage sheet;
+Almeria, ES;Spain;23;24;40HC;Client provided;;Original Tonnage sheet;
+Altamira, MX;Mexico;22;23;40HC;Client provided;;Original Tonnage sheet;
+Apapa, NG;Nigeria;;;40HC;MISSING;NO RELIABLE SOURCE FOUND — please provide. Nigeria FRSC regulations not available online.;;
+Ashdod, IL;Israel;24;25;40HC;Client provided;;Original Tonnage sheet;
+Balboa, PA;Panama;;;40HC;MISSING;NO RELIABLE SOURCE FOUND — please provide. Panama ATTT Ley 10/1989 exists but unreadable online.;;
+Bangkok, TH;Thailand;28;32;40HC;Official;"Road limit to Bangkok; heavier cargo must clear at Laem Chabang terminal";Maersk Advisory: Thailand Roads Overweight Limitation;https://www.maersk.com/~/media_sc9/maersk/local-information/files/asia-pacific/thailand/import/advisory-roads-overweight-limitation-v1.pdf
+Barcelona, ES;Spain;23;24;40HC;Client provided;;Original Tonnage sheet;
+Belfast Northern Ireland, GB;United Kingdom;26;30;40HC;Official;UK: 44T GVW for 6-axle articulated per GOV.UK → ~26T net payload;GOV.UK HGV Maximum Weights + Unifeeder/P&O;"https://www.gov.uk/government/publications/hgv-maximum-weights/hgv-maximum-weights
+https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations
+https://www.poferrymasters.com/road-weight-limitations"
+Bilbao, ES;Spain;23;24;40HC;Client provided;;Original Tonnage sheet;
+Brisbane, AU;Australia;24;25;40HC;Client provided;;Original Tonnage sheet;
+Burgas, BG;Bulgaria;23;24;40HC;Client provided;;Original Tonnage sheet;
+Busan, KR;South Korea;21;22;40HC;Client provided;Higher gross weights up to ~22 MT were accepted in previous shipments, subject to local approval and chassis availability.;Original Tonnage sheet;
+Cagliari, IT;Italy;27;31;40HC;Semi-official;Italy: Unifeeder says 27T net payload. NOTE: client GioiaTauro entry = 25T gross — discrepancy needs clarification;Unifeeder & P&O Ferrymasters road weight limitations (both publish identical values);"https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations
+https://www.poferrymasters.com/road-weight-limitations"
+Callao, PE;Peru;24;25;40HC;Client provided;;Original Tonnage sheet;
+Cartagena, CO;Spain;23;24;40HC;Client provided;;Original Tonnage sheet;
+Casablanca, MA;Morocco;26;27;40HC;Client provided;;Original Tonnage sheet;
+Dar es Salaam, TZ;Tanzania;25;29;40HC;Official;Weight restrictions effective March 2019: 25T + tare for 40ft;ONE Line official advisory (2019);https://www.one-line.com/en/news/weight-restrictions-tanzania-effective-1st-march-2019
+Djibouti, DJ;Djibouti;;;40HC;MISSING;NO RELIABLE SOURCE FOUND — UNCTAD reports 58T GVW for Ethiopia corridor but no port-specific data.;;https://unctad.org/system/files/official-document/aldc2018d6_en.pdf
+Dublin, IE;Ireland;26;30;40HC;Semi-official;Ireland: 44T GVW per RSA.ie regulations → 26T net payload per Unifeeder/P&O;RSA.ie Vehicle Weights & Dimensions + Unifeeder/P&O;"https://www.rsa.ie/road-safety/road-users/professional-drivers/vehicle-safety-legislation/weights-and-dimensions
+https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations
+https://www.poferrymasters.com/road-weight-limitations"
+Durban, ZA;South Africa;25;26;40HC;Client provided;;Original Tonnage sheet;
+Fremantle, AU;Australia;20,5;24,5;40HC;Semi-official;"Western Australia: 24.5T max loaded; heavy mass permits available to 30T";Cargo Network International;https://www.cargonetwork.com.au/container-weight-limitations/
+Genoa Vado Ligure, IT;Italy;27;31;40HC;Semi-official;Italy: Unifeeder says 27T net payload. NOTE: client GioiaTauro entry = 25T gross — discrepancy needs clarification;Unifeeder & P&O Ferrymasters road weight limitations (both publish identical values);"https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations
+https://www.poferrymasters.com/road-weight-limitations"
+Gijon, ES;Spain;24,5;28,5;40HC;Semi-official;Spain: 24.5T net payload per Unifeeder/P&O. Consistent with client data (24T gross for other Spanish ports);Unifeeder & P&O Ferrymasters road weight limitations (both publish identical values);"https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations
+https://www.poferrymasters.com/road-weight-limitations"
+Grangemouth, GB;United Kingdom;26;30;40HC;Official;UK: 44T GVW per GOV.UK;GOV.UK HGV Maximum Weights + Unifeeder/P&O;"https://www.gov.uk/government/publications/hgv-maximum-weights/hgv-maximum-weights
+https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations
+https://www.poferrymasters.com/road-weight-limitations"
+Guayaquil-Posorja, EC;Ecuador;24;25;40HC;Client provided;;Original Tonnage sheet;
+Haifa, IL;Israel;29;33;40HC;Official;"Standard equipment; consistent with client Ashdod entry (25T gross). NOTE: OOCL says 33T, client says 25T — discrepancy";OOCL Israel Operational Restrictions;https://www.oocl.com/israel/eng/localinformation/operationalrestrictions
+Hakata, JP;Japan;19;20;40HC;Client provided;Standard Charges – 2 Axle Chassis;Original Tonnage sheet;
+Kaohsiung, TW;Taiwan;21;22;40HC;Client provided;;Original Tonnage sheet;
+Kingston, JM;Jamaica;;;40HC;MISSING;NO RELIABLE SOURCE FOUND — Jamaica Transport Authority (ta.org.jm) has no weight data online.;;https://www.ta.org.jm/
+Kobe, JP;Japan;22;26;40HC;Official;3-axle chassis (30.48T gross). 2-axle = 24T gross (20T net). Consistent with client data.;OOCL Customer Advisory: Japan Revised Weight Limitations (April 2008);https://www.oocl.com/usa/eng/localinformation/localnews/2008/Pages/customeradvisoryjapanrevisedweightlimitationseffectiveapril12008.aspx
+La Spezia, IT;Italy;27;31;40HC;Semi-official;Italy: Unifeeder says 27T net payload. NOTE: client GioiaTauro entry = 25T gross — discrepancy needs clarification;Unifeeder & P&O Ferrymasters road weight limitations (both publish identical values);"https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations
+https://www.poferrymasters.com/road-weight-limitations"
+Laem Chabang, TH;Thailand;28;32;40HC;Official;"Terminal limit; no road restriction for local clearance";Maersk Advisory: Thailand Roads Overweight Limitation;https://www.maersk.com/~/media_sc9/maersk/local-information/files/asia-pacific/thailand/import/advisory-roads-overweight-limitation-v1.pdf
+Las Palmas de Gran Canaria, ES;Spain;23;24;40HC;Client provided;;Original Tonnage sheet;
+Leghorn, IT;Italy;27;31;40HC;Semi-official;Italy (Livorno): Unifeeder says 27T net payload. NOTE: client GioiaTauro = 25T gross — discrepancy;Unifeeder & P&O Ferrymasters road weight limitations (both publish identical values);"https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations
+https://www.poferrymasters.com/road-weight-limitations"
+Leixoes, PT;Portugal;24;25;40HC;Client provided;;Original Tonnage sheet;
+Lisbon, PT;Portugal;25,5;29,5;40HC;Semi-official;Portugal: 25.5T net payload per Unifeeder/P&O. Consistent with client Leixoes/Sines data (25T gross);Unifeeder & P&O Ferrymasters road weight limitations (both publish identical values);"https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations
+https://www.poferrymasters.com/road-weight-limitations"
+Liverpool, GB;United Kingdom;26;30;40HC;Official;UK: 44T GVW per GOV.UK;GOV.UK HGV Maximum Weights + Unifeeder/P&O;"https://www.gov.uk/government/publications/hgv-maximum-weights/hgv-maximum-weights
+https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations
+https://www.poferrymasters.com/road-weight-limitations"
+London Gateway, GB;United Kingdom;25;26;40HC;Client provided;New update from 28.11.24;Original Tonnage sheet;
+Manzanillo, MX;Mexico;22;23;40HC;Client provided;;Original Tonnage sheet;
+Marin, ES;Spain;24,5;28,5;40HC;Semi-official;Spain: 24.5T net payload per Unifeeder/P&O;Unifeeder & P&O Ferrymasters road weight limitations (both publish identical values);"https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations
+https://www.poferrymasters.com/road-weight-limitations"
+Melbourne, AU;Australia;24;25;40HC;Client provided;;Original Tonnage sheet;
+Mersin, TR;Turkey;24;25;40HC;Client provided;;Original Tonnage sheet;
+Mombasa, KE;Kenya;24;25;40HC;Client provided;;Original Tonnage sheet;
+Montreal, CA;Canada;26,3;30,3;40HC;Official;Max cargo 58,000 lbs (26.3T) per CMA CGM Canada guideline;CMA CGM Canada Intermodal Max Cargo Weight Guideline (2023);https://www.cma-cgm.com/assets/public/pdf/Advisory%20-%20Canada%20Intermodal%20Max%20Cargo%20Weight%20Guideline%205.pdf
+Naples, IT;Italy;27;31;40HC;Semi-official;Italy: Unifeeder says 27T net payload. NOTE: client GioiaTauro = 25T gross — discrepancy;Unifeeder & P&O Ferrymasters road weight limitations (both publish identical values);"https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations
+https://www.poferrymasters.com/road-weight-limitations"
+Osaka, JP;Japan;25;26;40HC;Client provided;Standard Charges + Additional Axle Charges – 3 Axle Chassis;Original Tonnage sheet;
+Paita, PE;Peru;21;25;40HC;Client-provided;Consistent with client data for Callao (25T gross);Client data consistency;
+Piraeus, GR;Greece;24;25;40HC;Client provided;;Original Tonnage sheet;
+Port Elizabeth, ZA;South Africa;22;26;40HC;Semi-official;Consistent with client data for Durban (26T gross) and Cape Town (26T gross);Client data consistency + Sumeil.co.za;https://sumeil.co.za/understanding-legal-weight-limits/
+Port Tangier Mediterranee, MA;Morocco;23;27;40HC;Client-provided;Consistent with client data for Agadir/Casablanca (27T gross);Client data consistency;
+Poti, GE;Georgia;26;27;40HC;Client provided;;Original Tonnage sheet;
+Salerno, IT;Italy;27;31;40HC;Semi-official;Italy: Unifeeder says 27T net payload. NOTE: client GioiaTauro = 25T gross — discrepancy;Unifeeder & P&O Ferrymasters road weight limitations (both publish identical values);"https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations
+https://www.poferrymasters.com/road-weight-limitations"
+Sendai, JP;Japan;22;26;40HC;Official;3-axle chassis. 2-axle = 20T gross.;OOCL Customer Advisory: Japan Revised Weight Limitations (April 2008);https://www.oocl.com/usa/eng/localinformation/localnews/2008/Pages/customeradvisoryjapanrevisedweightlimitationseffectiveapril12008.aspx
+Southampton, GB;United Kingdom;25;26;40HC;Client provided;;Original Tonnage sheet;
+Sydney, AU;Australia;24;25;40HC;Client provided;;Original Tonnage sheet;
+Taichung, TW;Taiwan;24;25;40HC;Client provided;;Original Tonnage sheet;
+Tarragona, ES;Spain;24,5;28,5;40HC;Semi-official;Spain: 24.5T net payload per Unifeeder/P&O;Unifeeder & P&O Ferrymasters road weight limitations (both publish identical values);"https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations
+https://www.poferrymasters.com/road-weight-limitations"
+Tema, GH;Ghana;21;22;40HC;Client provided;;Original Tonnage sheet;
+Tenerife, ES;Spain;23;24;40HC;Client provided;;Original Tonnage sheet;
+Toronto, CA;Canada;22;23;40HC;Client provided;We can load up to 23 M/T per 40' container as the cargo gross weight for all Canada locations.;Original Tonnage sheet;
+Tunis, TN;Tunisia;;;40HC;MISSING;NO RELIABLE SOURCE FOUND — Tunisia transport regulations not available in English or French online.;;
+Valencia, ES;Spain;23;24;40HC;Client provided;;Original Tonnage sheet;
+Vancouver, CA;Canada;29,5;33,5;40HC;Official;Max cargo 65,000 lbs (29.5T) per CMA CGM Canada guideline;CMA CGM Canada Intermodal Max Cargo Weight Guideline (2023);https://www.cma-cgm.com/assets/public/pdf/Advisory%20-%20Canada%20Intermodal%20Max%20Cargo%20Weight%20Guideline%205.pdf
+Venezia, IT;Italy;27;31;40HC;Semi-official;Italy: Unifeeder says 27T net payload. NOTE: client GioiaTauro = 25T gross — discrepancy;Unifeeder & P&O Ferrymasters road weight limitations (both publish identical values);"https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations
+https://www.poferrymasters.com/road-weight-limitations"
+Veracruz, MX;Mexico;22;23;40HC;Client provided;;Original Tonnage sheet;
+Yokohama, JP;Japan;22;26;40HC;Official;"3-axle chassis. 2-axle = 20T gross. NOTE: spelled ""Yokohoma"" in client file — typo.";OOCL Customer Advisory: Japan Revised Weight Limitations (April 2008);https://www.oocl.com/usa/eng/localinformation/localnews/2008/Pages/customeradvisoryjapanrevisedweightlimitationseffectiveapril12008.aspx

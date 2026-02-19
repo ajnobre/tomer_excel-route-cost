@@ -1,0 +1,16 @@
+Source References — All URLs verified February 2026;;;;
+;;;;
+Source Name;URL;Data Covered;Authority Level;
+GOV.UK — HGV Maximum Weights;https://www.gov.uk/government/publications/hgv-maximum-weights/hgv-maximum-weights;UK: 44T GVW for 6-axle articulated vehicle;Official (UK Government);
+Unifeeder — Road Weight Limitations;https://www.unifeeder.com/shortsea/customer-info/road-weight-limitations;EU: Italy 27T, Spain 24.5T, Portugal 25.5T, Ireland 26T, UK 26T payload;Semi-official (shipping company);
+P&O Ferrymasters — Road Weight Limitations;https://www.poferrymasters.com/road-weight-limitations;Same EU countries — identical values, cross-validates Unifeeder;Semi-official (shipping company);
+RSA Ireland — Vehicle Weights & Dimensions;https://www.rsa.ie/road-safety/road-users/professional-drivers/vehicle-safety-legislation/weights-and-dimensions;Ireland: 44T GVW regulatory basis;Official (Irish Road Safety Authority);
+OOCL — Japan Weight Limitations (2008);https://www.oocl.com/usa/eng/localinformation/localnews/2008/Pages/customeradvisoryjapanrevisedweightlimitationseffectiveapril12008.aspx;Japan: 24T (2-axle), 30.48T (3-axle) for 40ft;Official (shipping line advisory);
+CMA CGM — Canada Max Cargo Weight;https://www.cma-cgm.com/assets/public/pdf/Advisory%20-%20Canada%20Intermodal%20Max%20Cargo%20Weight%20Guideline%205.pdf;Canada: Vancouver 65K lbs, Montreal 58K lbs;Official (shipping line guideline);
+Maersk — Thailand Overweight Limitation;https://www.maersk.com/~/media_sc9/maersk/local-information/files/asia-pacific/thailand/import/advisory-roads-overweight-limitation-v1.pdf;Thailand: 32T gross max for Bangkok road transport;Official (shipping line advisory);
+ONE Line — Tanzania Weight Restrictions;https://www.one-line.com/en/news/weight-restrictions-tanzania-effective-1st-march-2019;Tanzania: 25T + tare for 40ft (effective March 2019);Official (shipping line advisory);
+Cargo Network International — AU Limits;https://www.cargonetwork.com.au/container-weight-limitations/;Australia by state: SA 28T, WA 24.5T, NSW 26T, VIC 27T, QLD 27.5T;Semi-official (freight forwarder);
+NHVR — AU Mass & Dimension (reference);https://nhvr.gov.au/road-access/mass-dimension-and-loading/general-mass-and-dimension-limits;Australia official regulator (could not fetch content);Official (AU Government);
+OOCL — Israel Operational Restrictions;https://www.oocl.com/israel/eng/localinformation/operationalrestrictions;Israel: 33T gross for road transport;Official (shipping line);
+Sumeil — SA Legal Weight Limits;https://sumeil.co.za/understanding-legal-weight-limits/;South Africa: road weight limit context;Semi-official;
+UNCTAD — Djibouti-Ethiopia Corridor;https://unctad.org/system/files/official-document/aldc2018d6_en.pdf;Djibouti corridor: 58T GVW for 6-axle (partial data);Official (UN report);
