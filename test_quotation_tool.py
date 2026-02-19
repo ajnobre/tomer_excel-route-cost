@@ -68,8 +68,8 @@ def test_named_ranges(wb):
     expected = [
         'IN_Keys', 'IN_ProdNos', 'IN_Descs', 'IN_PCS', 'IN_FOB',
         'SL_Keys', 'SL_ProdNos', 'SL_Descs', 'SL_PCS', 'SL_FOB',
-        'FR_Keys', 'FR_Transit', 'FR_USD', 'FR_EUR',
-        'FR_GrossWT', 'FR_Confirmed', 'FR_BAS',
+        'FR_Keys', 'FR_Transit', 'FR_AllIn',
+        'FR_GrossWT', 'FR_Confirmed',
         'SizeList', 'ChipsList', 'ECList', 'PlasticList',
         'HolesList', 'BSUList', 'DestList', 'WeightTiers',
     ]
@@ -126,27 +126,31 @@ def test_data_integrity(wb):
     products_with_fob = sum(1 for r in sl_rows if any(r[17+i] for i in range(7)))
     print(f"  [INFO] {products_with_fob}/{len(sl_rows)} SL_GB products have at least one FOB price")
 
-    # Freight (now 9 columns: A-I)
+    # Freight (8 columns: A-H)
     ws_fr = wb['Freight']
-    fr_rows = get_sheet_data(ws_fr, max_col=9)
+    fr_rows = get_sheet_data(ws_fr, max_col=8)
     print(f"  Freight: {len(fr_rows)} routes")
 
-    india_routes = sum(1 for r in fr_rows if r[1] == 'India')
-    sl_routes = sum(1 for r in fr_rows if r[1] == 'Sri Lanka')
-    print(f"  [INFO] India routes: {india_routes}, Sri Lanka routes: {sl_routes}")
+    # Count routes per origin
+    origin_counts = {}
+    for r in fr_rows:
+        origin = r[2]
+        origin_counts[origin] = origin_counts.get(origin, 0) + 1
+    for origin, count in sorted(origin_counts.items()):
+        print(f"  [INFO] {origin}: {count} routes")
 
-    # Check tonnage and BAS columns
-    fr_headers = [ws_fr.cell(row=1, column=c).value for c in range(1, 11)]
-    if fr_headers[7] == 'Gross_Weight_MT' and fr_headers[8] == 'Weight_Confirmed' and fr_headers[9] == 'BAS_USD':
-        print(f"  [PASS] Freight columns H-J present (Gross_Weight_MT, Weight_Confirmed, BAS_USD)")
+    # Check column headers
+    fr_headers = [ws_fr.cell(row=1, column=c).value for c in range(1, 9)]
+    if fr_headers[5] == 'All_In_USD' and fr_headers[6] == 'Gross_Weight_MT' and fr_headers[7] == 'Weight_Confirmed':
+        print(f"  [PASS] Freight columns F-H present (All_In_USD, Gross_Weight_MT, Weight_Confirmed)")
     else:
-        print(f"  [FAIL] Freight columns H-J missing or wrong. Headers: {fr_headers}")
+        print(f"  [FAIL] Freight columns F-H missing or wrong. Headers: {fr_headers}")
         ok = False
 
     # Validate tonnage data
-    confirmed_count = sum(1 for r in fr_rows if r[8] == 1)
-    default_count = sum(1 for r in fr_rows if r[8] == 0)
-    has_weight = sum(1 for r in fr_rows if r[7] is not None and r[7] > 0)
+    confirmed_count = sum(1 for r in fr_rows if r[7] == 1)
+    default_count = sum(1 for r in fr_rows if r[7] == 0)
+    has_weight = sum(1 for r in fr_rows if r[6] is not None and r[6] > 0)
     print(f"  [INFO] Tonnage: {confirmed_count} confirmed, {default_count} default (out of {len(fr_rows)} routes)")
 
     if has_weight == len(fr_rows):
@@ -156,7 +160,7 @@ def test_data_integrity(wb):
         ok = False
 
     # Confirm all default weights are 23
-    bad_defaults = [r for r in fr_rows if r[8] == 0 and r[7] != 23]
+    bad_defaults = [r for r in fr_rows if r[7] == 0 and r[6] != 23]
     if not bad_defaults:
         print(f"  [PASS] All unconfirmed routes use default 23 MT")
     else:
@@ -164,7 +168,7 @@ def test_data_integrity(wb):
         ok = False
 
     # Confirm flag is 0 or 1
-    bad_flags = [r for r in fr_rows if r[8] not in (0, 1)]
+    bad_flags = [r for r in fr_rows if r[7] not in (0, 1)]
     if not bad_flags:
         print(f"  [PASS] All Weight_Confirmed flags are 0 or 1")
     else:
@@ -198,16 +202,23 @@ def test_formula_simulation(wb):
 
     in_data = get_sheet_data(ws_in, max_col=24)
     sl_data = get_sheet_data(ws_sl, max_col=24)
-    fr_data = get_sheet_data(ws_fr, max_col=10)
+    fr_data = get_sheet_data(ws_fr, max_col=8)
 
     weight_tiers = [19.5, 22, 23, 24, 25, 26, 27]
 
-    def simulate(size, chips, ec, plastic, holes, bsu, destination, eur_rate=1.08):
+    # 3 origins: Cochin and Tuticorin use IN products, Colombo uses SL products
+    ORIGINS = [
+        ('Cochin, IN', in_data, 'IN'),
+        ('Tuticorin, IN', in_data, 'IN'),
+        ('Colombo, LK', sl_data, 'SL'),
+    ]
+
+    def simulate(size, chips, ec, plastic, holes, bsu, destination):
         """Simulate what Excel formulas would compute (weight auto-derived from tonnage)."""
         lookup_key = f"{size}|{chips}|{ec}|{plastic}|{holes}|{bsu}"
 
         results = {}
-        for label, data, prefix in [('India', in_data, 'IN'), ('Sri Lanka', sl_data, 'SL')]:
+        for origin, data, prefix in ORIGINS:
             # MATCH product
             prod_match = None
             for i, row in enumerate(data):
@@ -215,20 +226,20 @@ def test_formula_simulation(wb):
                     prod_match = i
                     break
 
-            # MATCH freight
-            fr_key = f"{label}|{destination}"
+            # MATCH freight (key is origin|destination)
+            fr_key = f"{origin}|{destination}"
             fr_match = None
             for i, row in enumerate(fr_data):
                 if row[0] == fr_key:
                     fr_match = i
                     break
 
-            # Get weight tier from freight data (auto-derived, col H=index 7)
+            # Get weight tier from freight data (col G=index 6)
             gross_wt = None
             confirmed = None
             if fr_match is not None:
-                gross_wt = fr_data[fr_match][7]
-                confirmed = fr_data[fr_match][8]
+                gross_wt = fr_data[fr_match][6]
+                confirmed = fr_data[fr_match][7]
 
             # Approximate MATCH for weight tier (largest tier <= gross weight)
             wt_idx = None
@@ -251,8 +262,8 @@ def test_formula_simulation(wb):
 
             if fr_match is not None:
                 transit = fr_data[fr_match][4]
-                bas_usd = fr_data[fr_match][9]  # BAS_USD column J
-                freight_total = bas_usd * 1.0605
+                all_in_usd = fr_data[fr_match][5]  # All_In_USD column F
+                freight_total = all_in_usd * 1.0605
             else:
                 transit = None
                 freight_total = None
@@ -264,7 +275,7 @@ def test_formula_simulation(wb):
             if fob is not None and freight_per_unit is not None:
                 total_cost = fob + freight_per_unit
 
-            results[label] = {
+            results[origin] = {
                 'product_code': prod_code,
                 'description': desc,
                 'fob': fob,
@@ -294,12 +305,10 @@ def test_formula_simulation(wb):
         test_key = sorted(common_keys)[0]
         parts = test_key.split('|')
         if len(parts) == 6:
-            fr_india_dests = set(r[3] for r in fr_data if r[1] == 'India')
-            fr_sl_dests = set(r[3] for r in fr_data if r[1] == 'Sri Lanka')
-            common_dests = fr_india_dests & fr_sl_dests
-
-            if common_dests:
-                test_dest = sorted(common_dests)[0]
+            # Find destinations available across all 3 origins
+            all_dests = set(r[3] for r in fr_data)
+            if all_dests:
+                test_dest = sorted(all_dests)[0]
 
                 print(f"  [INFO] Testing with key: {test_key}")
                 print(f"  [INFO] Destination: {test_dest}")
@@ -387,21 +396,19 @@ def test_formula_simulation(wb):
         else:
             print(f"  [INFO] No shared keys between India/SL matching reference (may use different weight tiers)")
 
-    # Search for freight routes with ~3000 (India) and ~5000 (Sri Lanka)
-    india_3000 = [(r[3], r[5], r[6]) for r in fr_data if r[1] == 'India' and r[5] is not None and 2800 <= r[5] + (r[6] or 0) * 1.08 <= 3200]
-    sl_5000 = [(r[3], r[5], r[6]) for r in fr_data if r[1] == 'Sri Lanka' and r[5] is not None and 4800 <= r[5] + (r[6] or 0) * 1.08 <= 5200]
+    # Search for freight routes with ALL IN ~3000 and ~5000
+    routes_3000 = [(r[2], r[3], r[5]) for r in fr_data if r[5] is not None and 2800 <= r[5] <= 3200]
+    routes_5000 = [(r[2], r[3], r[5]) for r in fr_data if r[5] is not None and 4800 <= r[5] <= 5200]
 
-    if india_3000:
-        print(f"  [INFO] India routes with freight ~$3000: {len(india_3000)}")
-        for dest, usd, eur in india_3000[:5]:
-            total = usd + (eur or 0) * 1.08
-            print(f"    {dest}: USD={usd} + EUR={eur}*1.08 = ${total:.2f}")
+    if routes_3000:
+        print(f"  [INFO] Routes with ALL IN ~$3000: {len(routes_3000)}")
+        for origin, dest, all_in in routes_3000[:5]:
+            print(f"    {origin} -> {dest}: ${all_in:.2f}")
 
-    if sl_5000:
-        print(f"  [INFO] Sri Lanka routes with freight ~$5000: {len(sl_5000)}")
-        for dest, usd, eur in sl_5000[:5]:
-            total = usd + (eur or 0) * 1.08
-            print(f"    {dest}: USD={usd} + EUR={eur}*1.08 = ${total:.2f}")
+    if routes_5000:
+        print(f"  [INFO] Routes with ALL IN ~$5000: {len(routes_5000)}")
+        for origin, dest, all_in in routes_5000[:5]:
+            print(f"    {origin} -> {dest}: ${all_in:.2f}")
 
     return ok
 
@@ -443,25 +450,18 @@ def test_quote_formulas(wb):
         print(f"  [FAIL] B11 should be a formula with WeightTiers, got: {b11}")
         ok = False
 
-    # Check EUR/USD rate default
-    rate = ws['B12'].value
-    if rate == 1.08:
-        print(f"  [PASS] EUR/USD rate default: {rate}")
-    else:
-        print(f"  [FAIL] EUR/USD rate: {rate}, expected 1.08")
-        ok = False
-
     # Check helper formulas in K column
     helper_cells = {
         'K4': 'B4&"|"&B5&"|"&B6&"|"&B7&"|"&B8&"|"&B9',    # lookup key
-        'K5': 'MATCH(K11,WeightTiers,1)',                     # weight tier (approximate match)
+        'K5': 'MATCH(K12,WeightTiers,1)',                     # weight tier (approximate match on K12)
         'K6': 'AND(B4<>"",B5<>"",B6<>"",B7<>"",B8<>"",B9<>"",B10<>"")',  # 7 inputs
-        'K7': 'MATCH(K4,IN_Keys,0)',                          # India match
-        'K8': 'MATCH(K4,SL_Keys,0)',                          # SL match
-        'K9': 'MATCH("India|"&B10,FR_Keys,0)',                # India freight
-        'K10': 'MATCH("Sri Lanka|"&B10,FR_Keys,0)',           # SL freight
-        'K11': 'INDEX(FR_GrossWT',                             # gross weight from tonnage
-        'K12': 'INDEX(FR_Confirmed',                           # confirmed flag
+        'K7': 'MATCH(K4,IN_Keys,0)',                          # India product match
+        'K8': 'MATCH(K4,SL_Keys,0)',                          # SL product match
+        'K9': 'MATCH("Cochin, IN|"&B10,FR_Keys,0)',           # Cochin freight
+        'K10': 'MATCH("Tuticorin, IN|"&B10,FR_Keys,0)',       # Tuticorin freight
+        'K11': 'MATCH("Colombo, LK|"&B10,FR_Keys,0)',         # Colombo freight
+        'K12': 'INDEX(FR_GrossWT',                             # gross weight from tonnage
+        'K13': 'INDEX(FR_Confirmed',                           # confirmed flag
     }
     for cell_ref, expected_fragment in helper_cells.items():
         formula = ws[cell_ref].value
@@ -471,8 +471,8 @@ def test_quote_formulas(wb):
             print(f"  [FAIL] {cell_ref}: expected '...{expected_fragment}...', got '{formula}'")
             ok = False
 
-    # Check result rows
-    for row, label in [(17, 'India'), (18, 'Sri Lanka')]:
+    # Check result rows (3 origins)
+    for row, label in [(17, 'Cochin, IN'), (18, 'Tuticorin, IN'), (19, 'Colombo, LK')]:
         src = ws.cell(row=row, column=1).value
         if src == label:
             print(f"  [PASS] Row {row} source label: {label}")
@@ -490,10 +490,10 @@ def test_quote_formulas(wb):
                 ok = False
 
     if ok:
-        print(f"  [PASS] All result formulas present in rows 17-18")
+        print(f"  [PASS] All result formulas present in rows 17-19")
 
     # Check warning message formula
-    warn = ws['A20'].value
+    warn = ws['A21'].value
     if warn and 'K6' in str(warn) and 'K7' in str(warn):
         print(f"  [PASS] Status message formula present")
     else:
@@ -502,14 +502,14 @@ def test_quote_formulas(wb):
 
     # Check tonnage warning row (A13)
     tonnage_warn = ws['A13'].value
-    if tonnage_warn and 'K12' in str(tonnage_warn) and 'WARNING' in str(tonnage_warn):
+    if tonnage_warn and 'K13' in str(tonnage_warn) and 'WARNING' in str(tonnage_warn):
         print(f"  [PASS] Tonnage warning formula present in A13")
     else:
         print(f"  [FAIL] Tonnage warning formula missing in A13, got: {tonnage_warn}")
         ok = False
 
     # Check description reference rows
-    for row, label in [(22, 'India'), (23, 'Sri Lanka')]:
+    for row, label in [(23, 'India'), (24, 'Sri Lanka')]:
         desc_formula = ws.cell(row=row, column=2).value
         if desc_formula and 'INDEX' in str(desc_formula):
             print(f"  [PASS] Row {row} description INDEX formula present")
@@ -640,7 +640,7 @@ def test_exhaustive_lookups(wb):
 
     in_data = get_sheet_data(ws_in, max_col=24)
     sl_data = get_sheet_data(ws_sl, max_col=24)
-    fr_data = get_sheet_data(ws_fr, max_col=10)
+    fr_data = get_sheet_data(ws_fr, max_col=8)
 
     weight_tiers = [19.5, 22, 23, 24, 25, 26, 27]
 
@@ -653,29 +653,32 @@ def test_exhaustive_lookups(wb):
         sl_pcs = sum(1 for r in sl_data if r[10 + i] is not None and r[10 + i] != 0)
         print(f"  {wt:>5} MT: IN FOB={in_count:>3}, IN PCS={in_pcs:>3} | SL FOB={sl_count:>3}, SL PCS={sl_pcs:>3}")
 
-    # Count freight routes
-    india_dests = set(r[3] for r in fr_data if r[1] == 'India')
-    sl_dests = set(r[3] for r in fr_data if r[1] == 'Sri Lanka')
-    both_dests = india_dests & sl_dests
-    only_india = india_dests - sl_dests
-    only_sl = sl_dests - india_dests
+    # Count freight routes per origin
+    origin_dests = {}
+    for r in fr_data:
+        origin = r[2]
+        dest = r[3]
+        if origin not in origin_dests:
+            origin_dests[origin] = set()
+        origin_dests[origin].add(dest)
 
     print(f"\n  --- Freight Route Coverage ---")
-    print(f"  Destinations with BOTH India + Sri Lanka: {len(both_dests)}")
-    print(f"  Destinations ONLY India:                  {len(only_india)}")
-    print(f"  Destinations ONLY Sri Lanka:              {len(only_sl)}")
+    for origin in sorted(origin_dests.keys()):
+        print(f"  {origin}: {len(origin_dests[origin])} destinations")
 
-    if only_india:
-        print(f"  India-only destinations: {sorted(only_india)[:5]}{'...' if len(only_india) > 5 else ''}")
-    if only_sl:
-        print(f"  SL-only destinations: {sorted(only_sl)[:5]}{'...' if len(only_sl) > 5 else ''}")
+    # Check all origins share the same destinations
+    all_dest_sets = list(origin_dests.values())
+    if len(all_dest_sets) >= 2 and all(d == all_dest_sets[0] for d in all_dest_sets[1:]):
+        print(f"  [PASS] All origins serve the same {len(all_dest_sets[0])} destinations")
+    else:
+        print(f"  [INFO] Origins have different destination sets")
 
-    # Check for negative or zero freight values
-    bad_freight = [(r[0], r[5], r[6]) for r in fr_data if (r[5] is not None and r[5] < 0) or (r[6] is not None and r[6] < 0)]
+    # Check for negative ALL IN values
+    bad_freight = [(r[0], r[5]) for r in fr_data if r[5] is not None and r[5] < 0]
     if bad_freight:
-        print(f"  [WARN] {len(bad_freight)} routes with negative freight!")
-        for key, usd, eur in bad_freight[:3]:
-            print(f"    {key}: USD={usd}, EUR={eur}")
+        print(f"  [WARN] {len(bad_freight)} routes with negative ALL IN freight!")
+        for key, all_in in bad_freight[:3]:
+            print(f"    {key}: ${all_in}")
     else:
         print(f"  [PASS] No negative freight values")
 
@@ -702,17 +705,17 @@ def test_tonnage_integration(wb):
     print("=" * 60)
 
     ws_fr = wb['Freight']
-    fr_data = get_sheet_data(ws_fr, max_col=10)
+    fr_data = get_sheet_data(ws_fr, max_col=8)
     weight_tiers = [19.5, 22, 23, 24, 25, 26, 27]
 
     ok = True
 
-    # Check that both India and Sri Lanka rows for the same destination have the same weight
+    # Check that all origin rows for the same destination have the same weight
     dest_weights = {}
     for r in fr_data:
         dest = r[3]
-        gross = r[7]
-        confirmed = r[8]
+        gross = r[6]
+        confirmed = r[7]
         if dest not in dest_weights:
             dest_weights[dest] = (gross, confirmed)
         else:
@@ -722,12 +725,12 @@ def test_tonnage_integration(wb):
                 ok = False
 
     if ok:
-        print(f"  [PASS] All destinations have consistent weight across India/Sri Lanka rows")
+        print(f"  [PASS] All destinations have consistent weight across all origin rows")
 
     # Check that all weights map to a valid tier
     unmappable = []
     for r in fr_data:
-        gross = r[7]
+        gross = r[6]
         mapped = False
         for wt in weight_tiers:
             if wt <= gross:
@@ -749,8 +752,8 @@ def test_tonnage_integration(wb):
         dest = r[3]
         if dest not in unique_dests:
             unique_dests.add(dest)
-            gross = r[7]
-            confirmed = r[8]
+            gross = r[6]
+            confirmed = r[7]
             label = f"{gross} MT ({'confirmed' if confirmed == 1 else 'default'})"
             weight_counts[label] = weight_counts.get(label, 0) + 1
 
@@ -813,10 +816,11 @@ def main():
     print("  1. Open Quotation_Tool.xlsx")
     print("  2. On the Quote sheet, select values from all 7 dropdowns")
     print("  3. Verify weight tier auto-populates based on destination")
-    print("  4. Select a destination with confirmed tonnage — no warning should appear")
-    print("  5. Select a destination with default tonnage — red warning banner should appear")
-    print("  6. Verify results still compute correctly")
-    print("  7. Check that hidden sheets are not visible (right-click sheet tabs)")
+    print("  4. Verify 3 result rows: Cochin, Tuticorin, Colombo")
+    print("  5. Select a destination with confirmed tonnage — no warning should appear")
+    print("  6. Select a destination with default tonnage — red warning banner should appear")
+    print("  7. Verify results still compute correctly")
+    print("  8. Check that hidden sheets are not visible (right-click sheet tabs)")
 
 
 if __name__ == '__main__':
