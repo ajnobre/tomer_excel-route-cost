@@ -589,17 +589,17 @@ def _build_quote_sheet(ws):
         'Using default 23 MT. Verify before quoting.","")'
     )
     ws['A13'].font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
-    # Conditional formatting: red background when warning is active
+    # Conditional formatting: orange background when warning is active
     ws.conditional_formatting.add('A13:I13', FormulaRule(
         formula=['AND($B$10<>"",$K$13=0)'],
-        fill=PatternFill(start_color='CC0000', end_color='CC0000', fill_type='solid'),
+        fill=PatternFill(start_color='E67E22', end_color='E67E22', fill_type='solid'),
         font=Font(bold=True, color='FFFFFF'),
     ))
-    # Conditional formatting: red on B11 when unconfirmed
+    # Conditional formatting: light orange on B11 when unconfirmed
     ws.conditional_formatting.add('B11', FormulaRule(
         formula=['AND($B$10<>"",$K$13=0)'],
-        fill=PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid'),
-        font=Font(bold=True, color='CC0000'),
+        fill=PatternFill(start_color='FDEBD0', end_color='FDEBD0', fill_type='solid'),
+        font=Font(bold=True, color='E67E22'),
     ))
 
     # ── Results section ────────────────────────────────────────────────────
