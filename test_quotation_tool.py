@@ -268,17 +268,22 @@ def test_formula_simulation(wb):
                 transit = None
                 freight_total = None
 
+            discount = 0.30  # default 30%
+            disc_fob = None
             freight_per_unit = None
             total_cost = None
+            if fob is not None:
+                disc_fob = fob * (1 - discount)
             if freight_total is not None and pcs and pcs > 0:
                 freight_per_unit = freight_total / pcs
-            if fob is not None and freight_per_unit is not None:
-                total_cost = fob + freight_per_unit
+            if disc_fob is not None and freight_per_unit is not None:
+                total_cost = disc_fob + freight_per_unit
 
             results[origin] = {
                 'product_code': prod_code,
                 'description': desc,
                 'fob': fob,
+                'disc_fob': disc_fob,
                 'freight_container': freight_total,
                 'units_container': pcs,
                 'freight_per_unit': freight_per_unit,
@@ -323,13 +328,23 @@ def test_formula_simulation(wb):
                         print(f"    Weight Tier:       {r['tier']} MT (gross={r['gross_wt']}, "
                               f"{'confirmed' if r['confirmed'] == 1 else 'DEFAULT'})")
                         print(f"    FOB/Unit:          ${r['fob']}")
+                        print(f"    Disc. FOB/Unit:    ${r['disc_fob']:.2f}" if r['disc_fob'] is not None else "    Disc. FOB/Unit:    N/A")
                         print(f"    Freight/Container: ${r['freight_container']:.2f}" if r['freight_container'] else "    Freight/Container: N/A")
                         print(f"    Units/Container:   {r['units_container']}")
                         print(f"    Freight/Unit:      ${r['freight_per_unit']:.4f}" if r['freight_per_unit'] else "    Freight/Unit:      N/A")
                         print(f"    Total Cost/Unit:   ${r['total_cost']:.4f}" if r['total_cost'] else "    Total Cost/Unit:   N/A")
                         print(f"    Transit Days:      {r['transit_days']}")
 
-                        # Verify arithmetic
+                        # Verify discount arithmetic
+                        if r['fob'] is not None and r['disc_fob'] is not None:
+                            expected_disc = r['fob'] * 0.70
+                            if abs(expected_disc - r['disc_fob']) < 0.001:
+                                print(f"    [PASS] Disc. FOB = FOB × (1 - 30%)")
+                            else:
+                                print(f"    [FAIL] Disc. FOB mismatch: {r['disc_fob']} vs expected {expected_disc}")
+                                ok = False
+
+                        # Verify freight arithmetic
                         if r['freight_container'] and r['units_container'] and r['units_container'] > 0:
                             expected_fpu = r['freight_container'] / r['units_container']
                             if abs(expected_fpu - r['freight_per_unit']) < 0.001:
@@ -338,10 +353,11 @@ def test_formula_simulation(wb):
                                 print(f"    [FAIL] Freight/Unit mismatch: {r['freight_per_unit']} vs expected {expected_fpu}")
                                 ok = False
 
-                        if r['fob'] and r['freight_per_unit']:
-                            expected_total = r['fob'] + r['freight_per_unit']
+                        # Verify total = discounted FOB + freight/unit
+                        if r['disc_fob'] is not None and r['freight_per_unit']:
+                            expected_total = r['disc_fob'] + r['freight_per_unit']
                             if abs(expected_total - r['total_cost']) < 0.001:
-                                print(f"    [PASS] Total = FOB + Freight/Unit")
+                                print(f"    [PASS] Total = Disc. FOB + Freight/Unit")
                             else:
                                 print(f"    [FAIL] Total mismatch: {r['total_cost']} vs expected {expected_total}")
                                 ok = False
@@ -433,6 +449,7 @@ def test_quote_formulas(wb):
     input_labels = {
         4: 'GB Size', 5: 'Chips', 6: 'EC Level', 7: 'Plastic',
         8: 'Holes', 9: 'BSU', 10: 'Port of Destination', 11: 'Container Gross Weight',
+        12: 'Discount',
     }
     for row, expected in input_labels.items():
         label = ws.cell(row=row, column=1).value
@@ -448,6 +465,14 @@ def test_quote_formulas(wb):
         print(f"  [PASS] B11 is an auto-derived formula (not a dropdown)")
     else:
         print(f"  [FAIL] B11 should be a formula with WeightTiers, got: {b11}")
+        ok = False
+
+    # B12 should be the discount input (default 30%)
+    b12 = ws['B12'].value
+    if b12 == 0.3 or b12 == 0.30:
+        print(f"  [PASS] B12 discount default = {b12} (30%)")
+    else:
+        print(f"  [FAIL] B12 discount default should be 0.30, got: {b12}")
         ok = False
 
     # Check helper formulas in K column
@@ -480,8 +505,8 @@ def test_quote_formulas(wb):
             print(f"  [FAIL] Row {row} source: '{src}', expected '{label}'")
             ok = False
 
-        # Check each result column has a formula
-        for col in range(2, 9):
+        # Check each result column has a formula (B through I = 9 columns)
+        for col in range(2, 10):
             val = ws.cell(row=row, column=col).value
             if val and str(val).startswith('='):
                 pass  # formula present
@@ -816,11 +841,13 @@ def main():
     print("  1. Open Quotation_Tool.xlsx")
     print("  2. On the Quote sheet, select values from all 7 dropdowns")
     print("  3. Verify weight tier auto-populates based on destination")
-    print("  4. Verify 3 result rows: Cochin, Tuticorin, Colombo")
-    print("  5. Select a destination with confirmed tonnage — no warning should appear")
-    print("  6. Select a destination with default tonnage — red warning banner should appear")
-    print("  7. Verify results still compute correctly")
-    print("  8. Check that hidden sheets are not visible (right-click sheet tabs)")
+    print("  4. Verify 3 result rows: Cochin, Tuticorin, Colombo (9 columns each)")
+    print("  5. Verify Disc. FOB = FOB × 70% (default 30% discount in B12)")
+    print("  6. Verify Total Cost = Disc. FOB + Freight/Unit")
+    print("  7. Change B12 discount to 0% — Disc. FOB should equal FOB")
+    print("  8. Select a destination with confirmed tonnage — no warning should appear")
+    print("  9. Select a destination with default tonnage — red warning banner should appear")
+    print("  10. Check that hidden sheets are not visible (right-click sheet tabs)")
 
 
 if __name__ == '__main__':

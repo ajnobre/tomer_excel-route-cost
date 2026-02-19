@@ -495,13 +495,13 @@ def _build_quote_sheet(ws):
     """Build the user-facing Quote sheet with inputs, outputs, and formulas."""
 
     # Column widths
-    col_widths = {'A': 30, 'B': 24, 'C': 20, 'D': 20, 'E': 18,
-                  'F': 18, 'G': 20, 'H': 20, 'I': 5, 'J': 5, 'K': 22}
+    col_widths = {'A': 30, 'B': 24, 'C': 20, 'D': 20, 'E': 20,
+                  'F': 18, 'G': 18, 'H': 20, 'I': 20, 'J': 5, 'K': 22}
     for col, w in col_widths.items():
         ws.column_dimensions[col].width = w
 
     # ── Title ──────────────────────────────────────────────────────────────
-    ws.merge_cells('A1:H1')
+    ws.merge_cells('A1:I1')
     ws['A1'].value = 'QUOTATION TOOL  --  GB Products'
     ws['A1'].font = TITLE_FONT
     ws['A1'].alignment = Alignment(vertical='center')
@@ -549,6 +549,15 @@ def _build_quote_sheet(ws):
     wt_cell.border = THIN_BORDER
     wt_cell.alignment = Alignment(horizontal='center')
 
+    # Row 12: Discount percentage (manual entry, default 30%)
+    ws.cell(row=12, column=1, value='Discount (%)').font = LABEL_FONT
+    disc = ws.cell(row=12, column=2, value=0.30)
+    disc.fill = INPUT_FILL
+    disc.font = INPUT_FONT
+    disc.border = THIN_BORDER
+    disc.alignment = Alignment(horizontal='center')
+    disc.number_format = '0%'
+
     # ── Helper cells (column K, hidden) ────────────────────────────────────
     # K4: lookup key (6 fields)
     ws['K4'] = '=B4&"|"&B5&"|"&B6&"|"&B7&"|"&B8&"|"&B9'
@@ -573,7 +582,7 @@ def _build_quote_sheet(ws):
     ws.column_dimensions['K'].hidden = True
 
     # ── Tonnage warning row ───────────────────────────────────────────────
-    ws.merge_cells('A13:H13')
+    ws.merge_cells('A13:I13')
     ws['A13'] = (
         '=IF(AND(B10<>"",K13=0),'
         '"WARNING: No confirmed weight data for this destination. '
@@ -581,7 +590,7 @@ def _build_quote_sheet(ws):
     )
     ws['A13'].font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
     # Conditional formatting: red background when warning is active
-    ws.conditional_formatting.add('A13:H13', FormulaRule(
+    ws.conditional_formatting.add('A13:I13', FormulaRule(
         formula=['AND($B$10<>"",$K$13=0)'],
         fill=PatternFill(start_color='CC0000', end_color='CC0000', fill_type='solid'),
         font=Font(bold=True, color='FFFFFF'),
@@ -595,17 +604,17 @@ def _build_quote_sheet(ws):
 
     # ── Results section ────────────────────────────────────────────────────
     ws.row_dimensions[14].height = 8   # spacer
-    ws.merge_cells('A15:H15')
+    ws.merge_cells('A15:I15')
     ws['A15'].value = 'RESULTS'
     ws['A15'].font = SECTION_FONT
     ws['A15'].fill = SECTION_FILL
-    for c in range(2, 9):
+    for c in range(2, 10):
         ws.cell(row=15, column=c).fill = SECTION_FILL
 
     # Column headers
     result_headers = [
         'Source', 'Product Code', 'FOB Price / Unit ($)',
-        'Freight / Container ($)', 'Units / Container',
+        'Disc. FOB / Unit ($)', 'Freight / Container ($)', 'Units / Container',
         'Freight / Unit ($)', 'Total Cost / Unit ($)', 'Transit Time (Days)',
     ]
     for c, h in enumerate(result_headers, 1):
@@ -625,7 +634,7 @@ def _build_quote_sheet(ws):
 
     # Conditional formatting: amber tint on weight-dependent result cells when unconfirmed
     amber_fill = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid')
-    for col_range in ['C17:C19', 'E17:E19', 'G17:G19']:
+    for col_range in ['C17:C19', 'D17:D19', 'F17:F19', 'H17:H19']:
         ws.conditional_formatting.add(col_range, FormulaRule(
             formula=['AND($B$10<>"",$K$13=0)'],
             fill=amber_fill,
@@ -633,7 +642,7 @@ def _build_quote_sheet(ws):
 
     # ── Status message ─────────────────────────────────────────────────────
     ws.row_dimensions[20].height = 8
-    ws.merge_cells('A21:H21')
+    ws.merge_cells('A21:I21')
     ws['A21'] = (
         '=IF(NOT(K6),"Please fill in all input fields above.",'
         'IF(AND(K7=0,K8=0),"No results found with the query inputs.",'
@@ -650,13 +659,13 @@ def _build_quote_sheet(ws):
     ws.row_dimensions[22].height = 8
     ws['A23'].value = 'India - Full Description'
     ws['A23'].font = DETAIL_FONT_B
-    ws.merge_cells('B23:H23')
+    ws.merge_cells('B23:I23')
     ws['B23'] = '=IF(NOT(K6),"",IF(K7=0,"-",INDEX(IN_Descs,K7)))'
     ws['B23'].font = DETAIL_FONT
 
     ws['A24'].value = 'Sri Lanka - Full Description'
     ws['A24'].font = DETAIL_FONT_B
-    ws.merge_cells('B24:H24')
+    ws.merge_cells('B24:I24')
     ws['B24'] = '=IF(NOT(K6),"",IF(K8=0,"-",INDEX(SL_Descs,K8)))'
     ws['B24'].font = DETAIL_FONT
 
@@ -691,20 +700,23 @@ def _write_result_row(ws, row, label, prefix, fr, is_alt=False):
     # C: FOB Price / Unit
     cell(3, f'=IF(NOT($K$6),"",IF(OR({mr}=0,$K$5=0),"-",INDEX({prefix}_FOB,{mr},$K$5)))', '#,##0.00')
 
-    # D: Freight / Container (ALL IN rate × 1.0605 insurance+margin multiplier)
-    cell(4, f'=IF(NOT($K$6),"",IF({fr}=0,"-",INDEX(FR_AllIn,{fr})*1.0605))', '#,##0.00')
+    # D: Discounted FOB / Unit  = C × (1 - discount%)
+    cell(4, f'=IF(NOT($K$6),"",IF(OR({mr}=0,$K$5=0),"-",C{row}*(1-$B$12)))', '#,##0.00')
 
-    # E: Units / Container
-    cell(5, f'=IF(NOT($K$6),"",IF(OR({mr}=0,$K$5=0),"-",INDEX({prefix}_PCS,{mr},$K$5)))', '#,##0')
+    # E: Freight / Container (ALL IN rate × 1.0605 insurance+margin multiplier)
+    cell(5, f'=IF(NOT($K$6),"",IF({fr}=0,"-",INDEX(FR_AllIn,{fr})*1.0605))', '#,##0.00')
 
-    # F: Freight / Unit  = D/E
-    cell(6, f'=IF(NOT($K$6),"",IFERROR(D{row}/E{row},"-"))', '#,##0.000')
+    # F: Units / Container
+    cell(6, f'=IF(NOT($K$6),"",IF(OR({mr}=0,$K$5=0),"-",INDEX({prefix}_PCS,{mr},$K$5)))', '#,##0')
 
-    # G: Total Cost / Unit  = C + F
-    cell(7, f'=IF(NOT($K$6),"",IFERROR(C{row}+F{row},"-"))', '#,##0.000')
+    # G: Freight / Unit  = E/F
+    cell(7, f'=IF(NOT($K$6),"",IFERROR(E{row}/F{row},"-"))', '#,##0.000')
 
-    # H: Transit Time (Days)
-    cell(8, f'=IF(NOT($K$6),"",IF({fr}=0,"-",INDEX(FR_Transit,{fr})))', '0')
+    # H: Total Cost / Unit  = D (discounted FOB) + G (freight/unit)
+    cell(8, f'=IF(NOT($K$6),"",IFERROR(D{row}+G{row},"-"))', '#,##0.000')
+
+    # I: Transit Time (Days)
+    cell(9, f'=IF(NOT($K$6),"",IF({fr}=0,"-",INDEX(FR_Transit,{fr})))', '0')
 
 
 # ── Main ───────────────────────────────────────────────────────────────────
